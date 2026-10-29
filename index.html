@@ -1,0 +1,2080 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Quotation Extractor</title>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #020617; --panel: #0f172a; --border: #1e293b; --border-light: #334155;
+    --amber: #f59e0b; --amber-light: #fbbf24; --text: #f1f5f9; --muted: #64748b;
+    --rose: #fb7185; --emerald: #34d399;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(rgba(148,197,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148,197,255,0.05) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .eyebrow { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; letter-spacing:.2em; text-transform:uppercase; color:var(--amber); margin-bottom:4px; }
+  h1 { font-size: 28px; font-weight: 700; margin: 0 0 6px; color: white; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+  .drop {
+    border: 2px dashed var(--border-light); border-radius: 8px; padding: 36px 20px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop.hover { border-color: var(--amber); background: rgba(245,158,11,0.06); }
+  .drop input { display: none; }
+  .filelist { margin-top: 14px; font-size: 13px; color: #cbd5e1; text-align: left; }
+  .filelist div { padding: 4px 0; border-bottom: 1px solid rgba(30,41,59,0.6); }
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600;
+    border: none; cursor: pointer; font-family: inherit;
+  }
+  .btn-primary { background: var(--amber); color: #020617; }
+  .btn-primary:hover { background: var(--amber-light); }
+  .btn-primary:disabled { background: #1e293b; color: #475569; cursor: not-allowed; }
+  .btn-secondary { background: none; border: 1px solid var(--border-light); color: #cbd5e1; }
+  .btn-secondary:hover { border-color: #64748b; }
+  .actions { margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .status { font-size: 13px; color: var(--muted); margin-top: 10px; min-height: 18px; }
+  .file-block { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .file-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .file-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .file-name { font-weight: 600; font-size: 14px; }
+  .tag { font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing:.05em; border-radius: 6px; padding: 4px 10px; border: 1px solid var(--border-light); background: #1e293b; }
+  .tag.ok { color: var(--emerald); border-color: rgba(52,211,153,0.4); }
+  .tag.warn { color: var(--rose); border-color: rgba(251,113,133,0.4); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); border-bottom:1px solid var(--border); padding:6px 8px; white-space:nowrap; }
+  tbody td { padding: 6px 8px; border-bottom: 1px solid rgba(30,41,59,0.6); vertical-align: top; }
+  tbody td.num { font-family: monospace; color: #cbd5e1; }
+  .more-note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .warn-note { color: var(--rose); font-size: 13px; margin-top: 6px; }
+  .empty-hint { color: var(--muted); font-size: 13px; }
+  .table-scroll { overflow-x: auto; }
+  .footer-note { color: var(--muted); font-size: 12px; margin-top: 24px; line-height: 1.6; }
+  .footer-note code { background: #1e293b; padding: 1px 5px; border-radius: 4px; }
+  @media (max-width: 480px) { .card { padding: 16px; } }
+  .opts { margin-top: 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; }
+  .opts input { accent-color: var(--amber); width: 15px; height: 15px; }
+  .opts .hint { color: var(--muted); font-size: 12px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .meta { font-size: 12.5px; color: #94a3b8; margin: 0 0 10px; line-height: 1.6; }
+  .meta b { color: #e2e8f0; font-weight: 600; }
+  .ok-note { color: var(--emerald); font-size: 13px; margin: 0 0 10px; }
+  .warn-note { margin: 0 0 10px; }
+  th.r, td.r { text-align: right; }
+  tbody tr.row-warn td { background: rgba(245,158,11,0.08); }
+  .note { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+  .okmark { color: var(--emerald); }
+  .warnmark { color: var(--amber); font-weight: 700; }
+  .totals { margin-top: 10px; font-size: 13px; color: #94a3b8; text-align: right; }
+  .totals b { color: #f8fafc; }
+  .engine { margin-top: 8px; font-size: 11px; color: var(--muted); letter-spacing: .03em; }
+  pre.raw { white-space: pre-wrap; font-size: 11px; color: #94a3b8; background: #0b1220; border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-top: 8px; max-height: 300px; overflow: auto; }
+
+  .h2 { font-size: 18px; font-weight: 700; margin: 0 0 6px; color: white; }
+  .sub2 { color: #94a3b8; font-size: 13px; margin: 0 0 16px; line-height: 1.6; }
+  .sub2 b { color: #e2e8f0; }
+  .defaults { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-end; margin-bottom: 16px; font-size: 12px; color: var(--muted); }
+  .defaults label { display: flex; flex-direction: column; gap: 4px; }
+  .defaults select, .hsel, .hin, .vin {
+    background: #0b1220; color: var(--text); border: 1px solid var(--border-light); border-radius: 6px;
+    padding: 6px 8px; font: inherit; font-size: 13px;
+  }
+  .defaults select { min-width: 130px; }
+  .defaults select:focus, .hsel:focus, .hin:focus, .vin:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+  .vrow { margin-bottom: 14px; font-size: 13px; color: #cbd5e1; }
+  .vrow label { display: block; margin-bottom: 5px; }
+  .vin { width: 100%; max-width: 560px; }
+  .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+  .chip { background: #1e293b; color: #e2e8f0; border: 1px solid var(--border-light); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  .chip:hover { border-color: var(--amber); }
+  .hin { width: 100%; min-width: 130px; }
+  .hin.wide { min-width: 280px; }
+  .hsel.need { border-color: var(--rose); }
+  .htable td { vertical-align: middle; }
+  .htable input[type=checkbox] { accent-color: var(--amber); width: 15px; height: 15px; }
+  textarea.fallback { width: 100%; height: 130px; margin-top: 10px; background: #0b1220; color: #cbd5e1; border: 1px solid var(--border-light); border-radius: 6px; font-family: monospace; font-size: 12px; padding: 8px; }
+  .muted { color: var(--muted); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+</style>
+<div class="wrap">
+  <div class="eyebrow">&#9635; Multi-supplier quotation extraction</div>
+  <h1>Quotation Extractor</h1>
+  <p class="sub">Upload supplier quotations - PDFs (text or scanned) or photos. Everything runs in your browser - nothing is uploaded anywhere.</p>
+
+  <div class="card">
+    <div class="drop" id="dropZone">
+      <div>Drop quotations here (PDF, PNG, JPG), or click to choose files</div>
+      <input type="file" id="fileInput" accept="application/pdf,image/*" multiple />
+    </div>
+    <div class="filelist" id="fileList"></div>
+    <label class="opts"><input type="checkbox" id="forceOcr" /> Force OCR <span class="hint">- for scanned PDFs that still carry a garbled text layer. Scans without text are OCR'd automatically.</span></label>
+    <div class="actions">
+      <button class="btn btn-primary" id="extractBtn" disabled>Extract</button>
+      <button class="btn btn-secondary" id="downloadBtn" style="display:none;">&#8681; Download Excel</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <div id="results"></div>
+  </div>
+
+  <div class="card" id="gridCard" style="display:none;">
+    <div class="eyebrow">&#8618; Spare Part Creation Form &middot; Spare_Parts_MD</div>
+    <h2 class="h2">Add these lines to the Spare Parts grid</h2>
+    <p class="sub2">Tick the lines you need, confirm the <b>Vendor Name</b> and <b>Inventory unit</b>, then copy.
+      In Power Apps click <b>From Quotation</b> (or <b>Paste from Excel</b>), press <b>Ctrl+V</b> in the box and click <b>Apply</b> -
+      the lines are added as new rows and checked by the grid's validation rules.</p>
+    <div class="defaults">
+      <label>Plant <select id="gridPlant"></select></label>
+      <label>Tracking Dimension Group <select id="gridTdg"></select></label>
+      <label>Item sales tax group <select id="gridTax"></select></label>
+      <span class="muted">Optional - applied to every copied line. Leave blank to fill them in the grid.</span>
+    </div>
+    <div id="gridVendors"></div>
+    <datalist id="gridVendorList"></datalist>
+    <div class="table-scroll">
+      <table class="htable">
+        <thead><tr><th></th><th>Supplier PN</th><th>Other Description</th><th>Inventory unit</th><th class="r">Qty</th><th>File</th></tr></thead>
+        <tbody id="gridRows"></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="gridCopyBtn">Copy lines for Power Apps</button>
+      <button class="btn btn-secondary" id="gridAll">Select all</button>
+      <button class="btn btn-secondary" id="gridNone">Select none</button>
+    </div>
+    <div class="status warn-note" id="gridHint"></div>
+    <div class="status" id="gridStatus"></div>
+    <textarea id="gridFallback" class="fallback" readonly style="display:none;" aria-label="Lines to copy"></textarea>
+  </div>
+
+  <div class="footer-note">
+    Reads any supplier's quotation with a layout-aware engine: it rebuilds the table columns from the PDF, finds each
+    line item by checking <b>Qty &times; Unit Price = Line Total</b>, applies line discounts, and then verifies the sum of all
+    lines against the quotation's own subtotal. Rows or files that don't add up are flagged for review instead of being
+    silently wrong. Supplier-specific rules for Krones, KHS, Alhuwais (SKF), ARCOMA (Festo), Tetra Pak, GEA, Surdry,
+    Lan Handling, Netstal, Kieselmann, Atlas Copco, Parker (Addamegh) and Veolia still run as a cross-check, and Festo
+    part numbers are decoded into shape / thread / tube size / material. Scanned PDFs and photos are read with OCR
+    (first scan needs an internet connection to load the OCR engine).
+    Extracted lines can be sent straight to the Spare Parts grid in Power Apps (Supplier PN, Other Description,
+    Inventory unit and Vendor Name).
+  </div>
+
+  <div style="text-align:center; margin-top:20px; font-size:11px; color:var(--muted); letter-spacing:.05em;">
+    Quotation Extractor &middot; V2.1
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   FESTO PART NUMBER DECODER
+   Decodes QS/QSL/QST/QSY/QSM/QSML push-in fittings, the NPKA
+   click-fitting series, and PUN/PAN/PEN tubing into plain specs.
+   Best-effort from Festo's published nomenclature - verify
+   anything safety-critical against festo.com.
+   ============================================================ */
+const FESTO_SERIES = {
+  QS:   ["Straight push-in fitting (threaded)", "Straight push-in connector (tube-to-tube)"],
+  QSL:  ["L-shape (elbow) push-in fitting (threaded)", "L-shape push-in connector (tube-to-tube)"],
+  QST:  ["T-connector push-in fitting (threaded)", "T-connector (all push-in ports)"],
+  QSY:  ["Y-connector push-in fitting (threaded)", "Y-connector (all push-in ports)"],
+  QSM:  ["Straight push-in fitting, mini series (threaded)", "Straight push-in connector, mini series"],
+  QSML: ["L-shape push-in fitting, mini series (threaded)", "L-shape push-in connector, mini series"],
+};
+const FESTO_BODY_MATERIAL = "Nickel-plated brass body, NBR seal, POM release ring";
+const NPKA_SHAPE = { D: "Straight", L: "L-shape (elbow)", T: "T-connector", Y: "Y-connector" };
+const G_FRACTIONS = { "18": "1/8", "14": "1/4", "38": "3/8", "12": "1/2", "116": "1/16", "316": "3/16" };
+
+function expandGDigits(digits) { return "G" + (G_FRACTIONS[digits] || digits); }
+function threadFromToken(tok) {
+  if (/^M\d+$/i.test(tok)) return tok.toUpperCase();
+  if (tok.includes("/")) return "G" + tok;
+  return expandGDigits(tok);
+}
+function isThreadToken(tok) { return tok.includes("/") || /^M\d+$/i.test(tok); }
+
+function festoDecode(pn) {
+  pn = (pn || "").trim();
+  const empty = { shape: "", threadSize: "", tubeSize: "", material: "", packQty: "", matched: false };
+
+  // NPKA click series: NPKA-<shape>-[G<thread>-]Q<tube>[-E][-P<pack>]
+  let m = pn.match(/^NPKA-([A-Z])-(?:G(\d+)-)?Q(\d+)(-E)?(?:-P(\d+))?$/i);
+  if (m) {
+    const [, shapeLetter, threadDigits, tube, allPush, pack] = m;
+    const shape = NPKA_SHAPE[shapeLetter.toUpperCase()] || shapeLetter;
+    let thread = "", material;
+    if (allPush || !threadDigits) {
+      material = `Push-pull click connector (all push-in ports), ${FESTO_BODY_MATERIAL}`;
+    } else {
+      thread = expandGDigits(threadDigits);
+      material = `Push-pull click connector, ${FESTO_BODY_MATERIAL}`;
+    }
+    return { shape, threadSize: thread, tubeSize: `${tube} mm`, material, packQty: pack || "", matched: true };
+  }
+
+  // PUN / PAN / PEN tubing: <SERIES>[-<grade>]-<OD>X<wall>-<colour>
+  m = pn.match(/^(PUN|PAN|PEN)(-[A-Z])?-(\d+(?:[.,]\d+)?)X(\d+(?:[.,]\d+)?)-([A-Z]+)$/i);
+  if (m) {
+    const [, , grade, od, wall, colour] = m;
+    const gradeTxt = { "-H": " (flame-retardant / halogen-free)", "-E": " (electrically conductive)" }[
+      (grade || "").toUpperCase()
+    ] || "";
+    return {
+      shape: "Plastic tubing (coil/length)", threadSize: "",
+      tubeSize: `${od} mm O.D. x ${wall} mm wall`,
+      material: `Polyurethane tubing${gradeTxt}, colour code ${colour}`, packQty: "", matched: true,
+    };
+  }
+
+  // QS / QSL / QST / QSY / QSM / QSML fittings and connectors
+  m = pn.match(/^(QSML|QSL|QST|QSY|QSM|QS)-(.+)$/i);
+  if (m) {
+    const series = m[1].toUpperCase();
+    const tokens = m[2].split("-");
+    const [threadedShape, connectorShape] = FESTO_SERIES[series] || ["Push-in fitting", "Push-in connector"];
+
+    if (tokens.length && isThreadToken(tokens[0])) {
+      const threadTok = tokens[0];
+      const nums = tokens.slice(1);
+      const tube = nums[0] || "";
+      const pack = nums[1] || "";
+      return {
+        shape: threadedShape, threadSize: threadFromToken(threadTok),
+        tubeSize: tube ? `${tube} mm` : "", material: FESTO_BODY_MATERIAL, packQty: pack, matched: true,
+      };
+    }
+
+    const nums = tokens.map(t => parseInt(t, 10));
+    if (nums.some(isNaN)) return empty;
+
+    let tubeTxt, pack;
+    if (series === "QST" || series === "QSY") {
+      tubeTxt = nums.length ? `${nums[0]} mm` : "";
+      pack = nums.length > 1 ? String(nums[1]) : "";
+    } else if (nums.length === 1) {
+      tubeTxt = `${nums[0]} mm`; pack = "";
+    } else if (nums.length === 2) {
+      const [a, b] = nums;
+      if (b >= 20 && b > a) { tubeTxt = `${a} mm`; pack = String(b); }
+      else { tubeTxt = `${a} mm to ${b} mm (reducer)`; pack = ""; }
+    } else {
+      const [a, b, c] = nums;
+      tubeTxt = `${a} mm to ${b} mm (reducer)`; pack = String(c);
+    }
+    return {
+      shape: connectorShape, threadSize: "", tubeSize: tubeTxt,
+      material: `Push-in union, ${FESTO_BODY_MATERIAL}`, packQty: pack, matched: true,
+    };
+  }
+
+  return empty;
+}
+
+/* ============================================================
+   CONFIGURATION
+   ============================================================ */
+const CONFIG = {
+  // Your own company name(s). Lines containing these are never taken as the
+  // supplier - they appear in the Buyer / Ship-to block of every quotation.
+  OWN_COMPANY: /al[\s-]?esayi|alesayi/i,
+  OCR_LANG: "eng",
+  OCR_SCALE: 4,          // PDF render scale used for OCR (4 = ~288 dpi)
+  MIN_TEXT_CHARS: 25,    // a page with less real text than this is treated as a scan
+};
+
+/* ============================================================
+   1. LAYOUT RECONSTRUCTION
+   Turns positioned text (pdf.js items or OCR words) into lines,
+   and each line into "cells" (text runs separated by a column gap).
+   The old version joined every fragment with one space, which
+   (a) destroyed column boundaries and (b) inserted fake spaces
+   inside numbers - the root cause of most extraction errors.
+   Gaps are now measured in font-size units:
+     gap < 0.12 em  -> same word (no space)
+     gap < 0.85 em  -> same cell (one space)
+     gap >= 0.85 em -> new cell (column boundary)
+   ============================================================ */
+const CELL_GAP = 0.85;
+const WORD_GAP = 0.12;
+
+function median(arr) {
+  const a = arr.filter(v => isFinite(v)).sort((x, y) => x - y);
+  if (!a.length) return 0;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+async function readPdfPages(pdf) {
+  const pages = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const vp = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    const items = [];
+    let chars = 0;
+    for (const it of content.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const m = pdfjsLib.Util.transform(vp.transform, it.transform);
+      if (Math.abs(m[1]) > Math.abs(m[0]) * 0.2) continue; // rotated / vertical text (margins, stamps)
+      const fs = Math.hypot(m[2], m[3]) || it.height || 8;
+      const w = it.width || fs * 0.5 * it.str.length;
+      chars += it.str.replace(/\s/g, "").length;
+      // Monospace / space-padded strings (typical of SAP print-outs) carry
+      // their columns inside one string: split them on 2+ spaces.
+      if (/\S\s{2,}\S/.test(it.str)) {
+        const cw = w / it.str.length;
+        for (const mm of it.str.matchAll(/\S+(?: \S+)*/g)) {
+          items.push({ str: mm[0], x: m[4] + mm.index * cw, y: m[5], w: mm[0].length * cw, fs });
+        }
+      } else {
+        items.push({ str: it.str, x: m[4], y: m[5], w, fs });
+      }
+    }
+    pages.push({ page: p, width: vp.width, height: vp.height, items, chars, pdfPage: page });
+  }
+  return pages;
+}
+
+function buildLines(page) {
+  const items = page.items.slice().sort((a, b) => a.y - b.y || a.x - b.x);
+  const rows = [];
+  const isOcr = items.length && items[0].top != null;
+  for (const it of items) {
+    let row = null;
+    for (let k = rows.length - 1; k >= 0 && k >= rows.length - 3; k--) {
+      const r = rows[k];
+      if (isOcr) {
+        // OCR boxes: same row when the boxes overlap vertically (robust to descenders like "," or "p")
+        const ov = Math.min(r.bot, it.top + it.h) - Math.max(r.top, it.top);
+        if (ov >= 0.45 * Math.min(r.bot - r.top, it.h)) { row = r; break; }
+      } else if (Math.abs(r.y - it.y) <= Math.max(1.2, 0.45 * Math.min(r.fs, it.fs))) { row = r; break; }
+    }
+    if (!row) { row = { y: it.y, fs: it.fs, items: [], top: it.top, bot: it.top + it.h }; rows.push(row); }
+    row.items.push(it);
+    row.y = row.items.reduce((s, i) => s + i.y, 0) / row.items.length;
+    row.fs = median(row.items.map(i => i.fs));
+    if (isOcr) {
+      row.top = median(row.items.map(i => i.top));
+      row.bot = median(row.items.map(i => i.top + i.h));
+    }
+  }
+  return rows.map(r => makeLine(r, page)).filter(Boolean).sort((a, b) => a.y - b.y);
+}
+
+function makeLine(row, page) {
+  const its = row.items.slice().sort((a, b) => a.x - b.x);
+  const cells = [];
+  let cur = null, prevEnd = -1e9, prev = null;
+  for (const it of its) {
+    // some PDFs fake bold text by drawing it twice with a tiny offset
+    if (prev && prev.str === it.str && Math.abs(prev.x - it.x) < 0.3 * it.fs) continue;
+    const fs = Math.min(it.fs, row.fs) || row.fs || 8;
+    const gap = it.x - prevEnd;
+    if (!cur || gap > CELL_GAP * fs) {
+      cur = { x0: it.x, x1: it.x + it.w, text: it.str };
+      cells.push(cur);
+    } else {
+      const sp = (gap > WORD_GAP * fs || /\s$/.test(cur.text) || /^\s/.test(it.str)) ? " " : "";
+      cur.text += sp + it.str;
+      cur.x1 = Math.max(cur.x1, it.x + it.w);
+    }
+    prevEnd = Math.max(prevEnd, it.x + it.w);
+    prev = it;
+  }
+  const clean = cells.map(c => ({ ...c, text: c.text.replace(/\s+/g, " ").trim() })).filter(c => c.text);
+  if (!clean.length) return null;
+  return {
+    page: page.page, pageH: page.height, y: row.y, fs: row.fs || 8, cells: clean,
+    x0: clean[0].x0, x1: Math.max(...clean.map(c => c.x1)),
+    text: clean.map(c => c.text).join("   "),
+    flat: clean.map(c => c.text).join(" "),
+  };
+}
+
+/* OCR (tesseract TSV) -> the same positioned-item format as pdf.js */
+function tsvToItems(tsv) {
+  const out = [];
+  for (const row of String(tsv || "").split("\n")) {
+    const c = row.split("\t");
+    if (c.length < 12 || c[0] !== "5") continue;
+    const text = c.slice(11).join(" ").trim();
+    if (!text || +c[10] < 0) continue;
+    const str = text === "pe" ? "pc" : text === "pes" ? "pcs" : text; // common OCR misread of "pc"
+    out.push({ str, x: +c[6], top: +c[7], w: +c[8], h: +c[9], conf: +c[10] });
+  }
+  const fs = median(out.map(i => i.h)) || 10;
+  out.forEach(i => {
+    i.fs = fs;
+    i.y = i.top + i.h / 2; // rows are grouped by box overlap (see buildLines)
+  });
+  return out;
+}
+
+/* ============================================================
+   2. TOKENS AND NUMBERS
+   ============================================================ */
+const UNIT_RE = /^(pcs?\.?|pce|pc\(s\)|ea\.?|each|nos?\.?|units?|set|sets|pair|prs|lot|lots|box|boxes|roll|rolls|m|mtr|mtrs|meters?|metres?|kg|kgs|g|l|ltr|litres?|liters?|pack|packs|pkt|kit|kits|stuks?|stk|st|piece|pieces|sht|sheets?|drums?|cans?|bags?|cartons?|ctn|hrs?|hours?|days?|lm|sqm|m2|job|ls|lump|pails?|tins?|bottles?|btl|tubes?|coils?|reels?|bundles?|dozen|doz|pallets?|ltrs?)\.?$/i;
+const CUR_RE = /^(EUR|USD|SAR|AED|CHF|GBP|CNY|RMB|JPY|EGP|KWD|QAR|BHD|OMR|INR|TRY|SEK|DKK|NOK|CAD|AUD|SR|€|\$|£)$/i;
+const DATE_RE = /^(\d{1,2}[.\/-]\d{1,2}[.\/-](\d{4}|\d{2})|\d{4}[.\/-]\d{1,2}[.\/-]\d{1,2})$/;
+const DATE_FIND = /\b(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[ -](?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[ -,]*\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]* \d{1,2},? \d{4})\b/i;
+
+function normDigits(s) {
+  return s.replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x660))
+          .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x6F0))
+          .replace(/٫/g, ".").replace(/٬/g, ",");
+}
+
+// Parses "1,434.12", "1.434,12", "1'434.50", "2.00", "-43.02", "(5.00)", "43.02-", "€12.50".
+// fmt = "us" | "eu" decides ambiguous values such as "1.740" or "3,000".
+function parseNum(raw, fmt) {
+  let s = String(raw).trim(), neg = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  s = s.replace(/^(EUR|USD|SAR|AED|CHF|GBP|SR|€|\$|£)/i, "").replace(/(EUR|USD|SAR|AED|CHF|GBP|SR|€|\$|£)$/i, "");
+  if (s.startsWith("-")) { neg = true; s = s.slice(1); }
+  else if (s.endsWith("-")) { neg = true; s = s.slice(0, -1); }
+  if (!/^\d[\d.,']*$/.test(s) || /[.,']$/.test(s) || DATE_RE.test(s)) return null;
+  s = s.replace(/'/g, "");
+  const dots = (s.match(/\./g) || []).length, commas = (s.match(/,/g) || []).length;
+  let dec = "";
+  if (dots && commas) dec = s.lastIndexOf(".") > s.lastIndexOf(",") ? "." : ",";
+  else if (commas === 1) dec = (s.length - s.indexOf(",") - 1 === 3 && fmt !== "eu") ? "" : ",";
+  else if (dots === 1) dec = (s.length - s.indexOf(".") - 1 === 3 && fmt === "eu") ? "" : ".";
+  let intPart = s, frac = "";
+  if (dec) { const i = s.lastIndexOf(dec); intPart = s.slice(0, i); frac = s.slice(i + 1); }
+  if (/[.,]/.test(frac)) return null;
+  if (/[.,]/.test(intPart)) {
+    const g = intPart.includes(",") ? "," : ".";
+    if (!new RegExp("^\\d{1,3}(\\" + g + "\\d{3})+$").test(intPart)) return null;
+    intPart = intPart.split(g).join("");
+  }
+  const v = parseFloat(intPart + (frac ? "." + frac : ""));
+  if (!isFinite(v)) return null;
+  return { v: neg ? -v : v, neg, dec: frac.length, intDigits: intPart.length, lead0: /^0\d/.test(intPart) };
+}
+
+function detectNumberFormat(lines) {
+  let eu = 0, us = 0;
+  for (const l of lines) for (const t of l.flat.split(" ")) {
+    if (/^-?\d{1,3}(\.\d{3})*,\d{2}$/.test(t)) eu++;
+    if (/^-?\d{1,3}(,\d{3})*\.\d{2}$/.test(t)) us++;
+  }
+  return eu > us ? "eu" : "us";
+}
+
+function tokenize(line, fmt) {
+  const toks = [];
+  line.cells.forEach((c, ci) => {
+    c.text.split(" ").forEach(t => { if (t) toks.push({ t, ci }); });
+  });
+  toks.forEach((tk, i) => {
+    let t = tk.t;
+    tk.isPct = /%$/.test(t) || (toks[i + 1] && toks[i + 1].t === "%");
+    if (/%$/.test(t)) t = t.slice(0, -1);
+    tk.isDate = DATE_RE.test(t);
+    tk.num = tk.isDate ? null : parseNum(t, fmt);
+    tk.isUnit = !tk.num && UNIT_RE.test(t);
+    tk.isCur = CUR_RE.test(t);
+    tk.isSym = /^[%*\-_=|:;,.\/×@]+$/.test(t) || /^x$/i.test(t);
+  });
+  // A cell is "numeric" when it holds only numbers / units / currency / symbols.
+  const cellNumeric = line.cells.map((_, ci) =>
+    toks.filter(tk => tk.ci === ci).every(tk => tk.num || tk.isUnit || tk.isCur || tk.isSym || tk.isPct));
+  toks.forEach(tk => { tk.standalone = cellNumeric[tk.ci]; });
+  return toks;
+}
+
+function isCodeLike(t) {
+  return t.length >= 2 && /\d/.test(t) && !/[a-z]{3,}/.test(t) && /^[\w\-\/.#+()ØøÄÖÜ]+$/i.test(t);
+}
+
+/* ============================================================
+   3. TABLE HEADER DETECTION
+   ============================================================ */
+function headerRole(text) {
+  const t = text.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!t || t.length > 32) return null;
+  if (/^(material|article|artikel|part|item code|code|art\.?[\s-]?nr\.?|artikel[\s-]?nr\.?|bestell[\s-]?nr\.?|mat\.?[\s-]?no\.?)$/.test(t)) return "pn";
+  if (/price\s*\/\s*unit|unit\s*(price|cost|rate)|u\.\s*price|\bprice\b|\brate\b|preis|prix|سعر/.test(t))
+    return /total|amount|ext|gesamt/.test(t) && !/unit|einzel/.test(t) ? "total" : "price";
+  if (/\b(qty|quantity|quant|menge|qté|qte)\b|^qty|الكمية/.test(t)) return "qty";
+  if (/descr|designation|bezeichnung|details|description|الوصف|البيان|product name|item name|particulars/.test(t)) return "desc";
+  if (/\b(total|amount|value|betrag|gesamt|montant)\b|الإجمالي|المبلغ|القيمة/.test(t)) return "total";
+  if (/\bdisc/.test(t)) return "disc";
+  if (/deliv|^del\.|lead ?time|lieferzeit|التسليم/.test(t)) return "delivery";
+  if (/^(unit|uom|u\/m|um|units?|me|einheit|unité|الوحدة)\.?$/.test(t)) return "unit";
+  if (/(item|part|art(icle)?|material|mat|catalog(ue)?|cat|order|product|model|ref)\.?\s*(no|nr|number|code|#)\b|\bp\/?n\b|part ?no|\bcode\b|\bsku\b|\bmodel\b|art\.? ?no|reference|رقم القطعة|الكود/.test(t)) return "pn";
+  if (/^(pos\.?|position|item|no\.?|#|s\.? ?no\.?|sr\.? ?no\.?|sl\.? ?no\.?|line|ln|s\/n|م|البند)$/.test(t)) return "pos";
+  if (/machine|vat|tax|currency|weight|origin|\bhs\b|brand|make/.test(t)) return "other";
+  return null;
+}
+
+function detectHeader(line) {
+  if (line.cells.length < 3 || line.cells.length > 16) return null;
+  const cols = line.cells.map(c => ({ x0: c.x0, x1: c.x1, label: c.text, role: headerRole(c.text) }));
+  const known = cols.filter(c => c.role);
+  const roles = new Set(known.map(c => c.role));
+  const numericRoles = ["qty", "price", "total"].filter(r => roles.has(r)).length;
+  if (roles.size < 3 || numericRoles < 2 || known.length / cols.length < 0.6) return null;
+  if (/\d{3,}/.test(line.flat.replace(/\b(19|20)\d{2}\b/g, ""))) return null; // header rows don't carry data
+  return { cols, roles };
+}
+
+function colAt(header, x, fs) {
+  let best = null;
+  for (const c of header.cols) if (c.x0 <= x + 0.8 * fs) best = c;
+  return best || header.cols[0];
+}
+
+// Nearest header column to a cell (any role). Callers only act on numeric roles,
+// so a number sitting under "Pos" / "Item" is never mistaken for a quantity.
+function numericColFor(header, cell) {
+  let best = null, bd = Infinity;
+  for (const c of header.cols) {
+    const d = Math.min(Math.abs(cell.x1 - c.x1), Math.abs((cell.x0 + cell.x1) / 2 - (c.x0 + c.x1) / 2), Math.abs(cell.x0 - c.x0));
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best && ["qty", "price", "total", "disc", "unit"].includes(best.role) ? best : null;
+}
+
+/* ============================================================
+   4. ITEM ROW DETECTION
+   A row is a line item when it contains three numbers in order
+   Qty, Price, Total with Qty x Price = Total (within rounding),
+   optionally after an inline discount %. This works for any
+   supplier, any column order and any language, and every row it
+   accepts is self-verified.
+   ============================================================ */
+function tolFor(q, p) { return Math.max(0.011, 0.0051 * Math.min(Math.abs(q), Math.abs(p)) + 0.011); }
+
+function findTriple(nums, pcts) {
+  const n = nums.length;
+  for (let k = n - 1; k >= 2; k--) for (let j = k - 1; j >= 1; j--) for (let i = j - 1; i >= 0; i--) {
+    const a = nums[i].num.v, b = nums[j].num.v, t = nums[k].num.v;
+    if (t < 0.01) continue;
+    const tol = tolFor(a, b);
+    if (Math.abs(a * b - t) <= tol) return { i, j, k, disc: null };
+    for (const d of pcts) {
+      if (d > 0 && d < 100 && Math.abs(a * b * (1 - d / 100) - t) <= tol + 0.0005 * t) return { i, j, k, disc: d };
+    }
+  }
+  return null;
+}
+
+function analyzeRow(line, fmt, header) {
+  const toks = tokenize(line, fmt);
+  if (!toks.some(tk => tk.num)) return null;
+  const pcts = toks.filter(tk => tk.isPct && tk.num).map(tk => Math.abs(tk.num.v));
+  const usable = tk => tk.num && !tk.isPct && !tk.num.neg && tk.num.v > 0 && !tk.num.lead0 &&
+    !(tk.num.intDigits >= 7 && tk.num.dec === 0);
+  let nums = toks.filter(tk => usable(tk) && tk.standalone);
+  let tri = findTriple(nums, pcts);
+  let relaxed = false;
+  if (!tri) {
+    nums = toks.filter(usable);
+    tri = findTriple(nums, pcts);
+    relaxed = !!tri;
+  }
+  let qTok, pTok, tTok, disc = null, verified = true;
+  if (tri) {
+    qTok = nums[tri.i]; pTok = nums[tri.j]; tTok = nums[tri.k]; disc = tri.disc;
+    const unitAfter = tk => { const i = toks.indexOf(tk); return toks[i + 1] && toks[i + 1].isUnit; };
+    let swap = false;
+    if (header) {
+      const ci = numericColFor(header, line.cells[qTok.ci]), cj = numericColFor(header, line.cells[pTok.ci]);
+      if (ci && cj && ci.role === "price" && cj.role === "qty") swap = true;
+    }
+    if (!swap && unitAfter(pTok) && !unitAfter(qTok)) swap = true;
+    if (!swap && !header && !Number.isInteger(qTok.num.v) && Number.isInteger(pTok.num.v) && !unitAfter(qTok)) swap = true;
+    if (swap) [qTok, pTok] = [pTok, qTok];
+  } else if (header && header.roles.has("price")) {
+    // No arithmetic match: fall back to the column positions under the header.
+    const byRole = {};
+    for (const tk of toks.filter(tk => usable(tk) && tk.standalone)) {
+      const col = numericColFor(header, line.cells[tk.ci]);
+      if (col && !byRole[col.role]) byRole[col.role] = tk;
+    }
+    if (!byRole.price) return null;
+    const hasText = toks.some(tk => !tk.num && !tk.isUnit && !tk.isCur && !tk.isSym && /[a-z]{2,}/i.test(tk.t));
+    if (!hasText) return null;
+    pTok = byRole.price; qTok = byRole.qty || null; tTok = byRole.total || null;
+    verified = false;
+  } else return null;
+
+  const q = qTok ? qTok.num.v : 1, p = pTok.num.v;
+  const t = tTok ? tTok.num.v : q * p;
+  if (!tri && tTok) verified = Math.abs(q * p - t) <= tolFor(q, p);
+  const used = new Set([qTok, pTok, tTok].filter(Boolean));
+  const firstIdx = Math.min(...[...used].map(tk => toks.indexOf(tk)));
+  const lastIdx = Math.max(...[...used].map(tk => toks.indexOf(tk)));
+  let unitTok = toks.find((tk, i) => tk.isUnit && i > firstIdx - 2 && i < lastIdx);
+  if (!unitTok && qTok) {
+    // a short word right after the quantity, or in the header's unit column, is the unit (PAIL, DRUM, ROLL...)
+    const after = toks[toks.indexOf(qTok) + 1];
+    if (after && !after.num && /^[A-Za-z]{1,5}\.?$/.test(after.t) && toks.indexOf(after) < lastIdx + 1) unitTok = after;
+    if (!unitTok && header && header.roles.has("unit")) {
+      unitTok = toks.find((tk, i) => !tk.num && i >= firstIdx && i <= lastIdx && /^[A-Za-z]{1,6}\.?$/.test(tk.t) &&
+        (numericColFor(header, line.cells[tk.ci]) || {}).role === "unit");
+    }
+    if (unitTok) unitTok.isUnit = true;
+  }
+  return { toks, qTok, pTok, tTok, q, p, t, disc, verified, relaxed, firstIdx, lastIdx, unit: unitTok ? unitTok.t : "" };
+}
+
+/* Splits the text in front of the numbers into Pos / PN / Description */
+function splitLeft(line, row, header) {
+  const out = { pos: "", pn: "", desc: [], other: [] };
+  const left = row.toks.slice(0, row.firstIdx).filter(tk => !tk.isUnit && !tk.isCur && !(tk.isSym && tk.t.length < 3 && !/^x$/i.test(tk.t)));
+  const groups = [];
+  for (const tk of left) {
+    const g = groups[groups.length - 1];
+    if (g && g.ci === tk.ci) g.parts.push(tk.t); else groups.push({ ci: tk.ci, parts: [tk.t], x0: line.cells[tk.ci].x0 });
+  }
+  const cells = groups.map(g => ({ text: g.parts.join(" "), x0: g.x0 }));
+  const takeCode = (text) => {
+    const ws = text.split(" ");
+    let k = 0;
+    while (k < ws.length && isCodeLike(ws[k])) k++;
+    if (k === 0 || k === ws.length) return [k === ws.length ? text : "", k === ws.length ? "" : text];
+    return [ws.slice(0, k).join(" "), ws.slice(k).join(" ")];
+  };
+  // "10 OR-120x5 O-ring..." or "00010 6ES7214-1AG40" arriving as one cell: peel off the position number
+  if (cells.length) {
+    const ws = cells[0].text.split(" ");
+    const headRole = header ? colAt(header, cells[0].x0, line.fs).role : null;
+    if (ws.length > 1 && /^\d{1,5}$/.test(ws[0]) && (headRole === "pos" || (!header && isCodeLike(ws[1])) || (header && !header.roles.has("pos") && isCodeLike(ws[1])))) {
+      out.pos = ws[0];
+      cells[0] = { text: ws.slice(1).join(" "), x0: cells[0].x0 + 1, afterPos: true };
+    }
+  }
+  cells.forEach((c, idx) => {
+    const isPosNum = /^\d{1,5}(\.\d{1,3})?$/.test(c.text);
+    let role = header ? colAt(header, c.x0, line.fs).role : null;
+    if (c.afterPos) role = "auto";
+    if (!header) role = (idx === 0 && isPosNum && cells.length > 1 && !out.pos) ? "pos" : "auto";
+    if (!role) role = "auto";
+    if (role === "pos" && isPosNum && !out.pos) { out.pos = c.text; return; }
+    if (role === "pos" && !isPosNum) role = "auto";
+    if (role === "pn" && !out.pn && cells.length > idx + 1 && /\d/.test(c.text) &&
+        c.text.length <= 30 && c.text.split(" ").length <= 4) { out.pn = c.text; return; }
+    if (role === "pn" || role === "auto") {
+      const [code, rest] = takeCode(c.text);
+      if (code && !out.pn) { out.pn = code; if (rest) out.desc.push(rest); return; }
+      if (role === "pn" && !out.pn && !code) { out.desc.push(c.text); return; }
+      out.desc.push(c.text); return;
+    }
+    if (role === "other" || role === "delivery" || role === "unit") {
+      const col = colAt(header, c.x0, line.fs);
+      out.other.push(`${col.label}: ${c.text}`); return;
+    }
+    out.desc.push(c.text);
+  });
+  // tokens between the numbers that are words (e.g. "Qty Unit Description Price" layouts)
+  const middle = row.toks.slice(row.firstIdx, row.lastIdx + 1)
+    .filter(tk => !tk.num && !tk.isUnit && !tk.isCur && !tk.isSym && !tk.isPct && !tk.isDate).map(tk => tk.t);
+  if (middle.length) out.desc.push(middle.join(" "));
+  return out;
+}
+
+/* ============================================================
+   5. LINE CLASSIFICATION + GENERIC PARSER
+   ============================================================ */
+const SUMMARY_RE = /^(sub[\s-]?total|total|grand\s+total|net\s+(total|amount|value|price)|gross\s+(total|amount|value)|freight|shipping|transport(ation)?|packing|packaging|handling|insurance|vat|tax|special\s+discount|additional\s+discount|discount|amount|sum|delivery\s+charges?|charges|customs|الإجمالي|المجموع|ضريبة|الخصم|إجمالي)\b/i;
+const DISC_RE = /\b(disc|discount|rabatt|nachlass|reduction|less)\b|خصم/i;
+const BOILER_RE = /\b(iban|swift|bic|bank|a\/c|acct|account no|p\.?\s?o\.?\s?box|tel(ephone)?|fax|telefax|vat no|vat reg|tax reg|trn|cr no|www\.|https?:|e-?mail)\b|[\w.+-]+@[\w-]+\.[a-z]{2,}/i;
+const ATTR = [
+  ["hsCode", /^(?:commodity code|hs[\s-]?code|h\.s\.?\s?code|customs tariff(?:\s*no\.?)?|tariff\s*(?:no|code)\.?|hts(?:\s*code)?|zolltarif\w*)\s*[:.]?\s*(.+)$/i],
+  ["origin", /^(?:country of origin|origin|c\.?o\.?o\.?|made in|ursprungsland)\s*[:.]?\s*(.+)$/i],
+  ["leadTime", /^(?:time of delivery|delivery time|lead[\s-]?time|del\.\s*time|delivery period|lieferzeit)\s*[:.]?\s*(.+)$/i],
+  ["skip", /^(?:pos(?:ition)?\.?\s*no\.?|item\s*no\.?)\s*[:.]?\s*\d+$/i],
+];
+const KV_RE = /^([A-Za-z؀-ۿ][\w؀-ۿ .\/()&-]{0,40}?)\s*:\s*(.*)$/;
+
+function detectBoiler(lines) {
+  const byText = new Map();
+  lines.forEach((l, i) => {
+    const k = l.flat;
+    if (!byText.has(k)) byText.set(k, new Set());
+    byText.get(k).add(l.page);
+  });
+  const pages = new Set(lines.map(l => l.page)).size;
+  const set = new Set();
+  lines.forEach((l, i) => {
+    const repeated = pages > 1 && byText.get(l.flat).size > 1 && !/^[\s\-_=.*~]+$/.test(l.flat);
+    const pageNo = /^page\s*\d+\s*(of|\/|\()?\s*\d*\)?$/i.test(l.flat) || /^\d+\s*\/\s*\d+$/.test(l.flat);
+    if (repeated || pageNo || BOILER_RE.test(l.flat)) set.add(i);
+  });
+  return set;
+}
+
+function classifyLine(L, fmt, header, docHasHeader, cur) {
+  const f = L.flat;
+  if (/^[\s\-_=.*~|]+$/.test(f)) return { type: "sep" };
+  const toks = tokenize(L, fmt);
+  const amounts = toks.filter(tk => tk.num && !tk.isPct && !tk.isDate);
+  const hasLetters = /[A-Za-z؀-ۿ]{2,}/.test(f);
+  if (SUMMARY_RE.test(f) && amounts.length) {
+    const isDisc = /discount/i.test(f.split(" ")[0] + " " + (f.split(" ")[1] || ""));
+    const indented = cur && L.x0 > cur.lineX0 + 2 * L.fs;
+    if (!(isDisc && indented)) {
+      const firstNum = toks.findIndex(tk => tk.num);
+      const label = toks.slice(0, firstNum).filter(tk => !/^_+$/.test(tk.t)).map(tk => tk.t).join(" ").replace(/[\s:(\[|\-]+$/, "");
+      return { type: "summary", label, amount: amounts[amounts.length - 1].num.v, toks };
+    }
+  }
+  if (cur && DISC_RE.test(f) && amounts.length && (toks.some(tk => tk.isPct) || amounts.some(tk => tk.num.neg))) {
+    const pct = toks.find(tk => tk.isPct && tk.num);
+    return { type: "discount", pct: pct ? Math.abs(pct.num.v) : null, amount: Math.abs(amounts[amounts.length - 1].num.v) };
+  }
+  const row = analyzeRow(L, fmt, header);
+  if (row && (row.verified || header)) {
+    const hasIdentity = row.toks.slice(0, row.firstIdx).some(tk => !tk.isSym);
+    if (hasIdentity || header) return { type: "item", row };
+  }
+  if (!hasLetters && amounts.length === 1 && toks.length <= 3) return { type: "amount", amount: amounts[0].num.v };
+  if (KV_RE.test(f)) return { type: "kv" };
+  return { type: "text" };
+}
+
+function parseGeneric(lines, fmt) {
+  const boiler = detectBoiler(lines);
+  const headers = lines.map(l => detectHeader(l));
+  const docHasHeader = headers.some(Boolean);
+  const items = [], summary = [];
+  let header = null, cur = null, started = false, pre = [], prevL = null;
+  const pageStarted = {};
+  const tableTypes = ["item", "sep", "discount", "amount", "summary"];
+
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
+    if (headers[i]) { header = headers[i]; started = true; pageStarted[L.page] = true; prevL = L; continue; }
+    if (boiler.has(i)) continue;
+    const c = classifyLine(L, fmt, header, docHasHeader, cur);
+    if (!started && c.type === "item" && !docHasHeader && c.row.verified) started = true;
+    if (!started) { prevL = L; continue; }
+    // running page header on continuation pages (quotation no., page x of y ...)
+    if (L.page > 1 && !pageStarted[L.page]) {
+      if (!tableTypes.includes(c.type)) continue;
+      pageStarted[L.page] = true;
+    }
+    if (cur && prevL && prevL.page === L.page && L.y - prevL.y > 3.6 * Math.max(L.fs, prevL.fs) && c.type !== "item") cur.closed = true;
+    prevL = L;
+
+    if (c.type === "summary") { summary.push({ label: c.label, amount: c.amount, text: L.flat }); if (cur) cur.closed = true; continue; }
+    if (c.type === "item") {
+      const left = splitLeft(L, c.row, header);
+      const tail = c.row.toks.slice(c.row.lastIdx + 1);
+      const dates = tail.filter(tk => tk.isDate).map(tk => tk.t);
+      const tailText = tail.filter(tk => !tk.isDate && !tk.isSym && !tk.num).map(tk => tk.t).join(" ");
+      cur = {
+        lineX0: L.x0, pos: left.pos, pn: left.pn, descParts: left.desc, notes: [...left.other],
+        q: c.row.q, p: c.row.p, t: c.row.t, unit: c.row.unit, discPct: c.row.disc, discAmt: null, net: null,
+        verified: c.row.verified, deliveryDate: dates[0] || "", leadTime: "", hsCode: "", origin: "",
+        section: pre.length ? sectionText(pre) : (items.length ? items[items.length - 1].section : ""),
+        cont: [], closed: false,
+      };
+      if (tailText) cur.notes.push(tailText);
+      if (c.row.disc != null) { cur.net = c.row.t; cur.t = c.row.q * c.row.p; }
+      items.push(cur);
+      pre = [];
+      continue;
+    }
+    if (c.type === "sep") continue;
+    if (!cur || cur.closed) { if (c.type === "kv" || c.type === "text") pre.push(L.flat); continue; }
+    if (c.type === "discount") { cur.discPct = c.pct; cur.discAmt = c.amount; continue; }
+    if (c.type === "amount") {
+      const expected = cur.discAmt != null ? cur.t - cur.discAmt : null;
+      if (expected != null && Math.abs(c.amount - expected) <= 0.05) cur.net = c.amount;
+      else if (Math.abs(c.amount - cur.t) <= 0.02) { /* repeated gross total */ }
+      else if (c.amount < cur.t) cur.net = c.amount;
+      continue;
+    }
+    cur.cont.push(L.flat);
+  }
+
+  return { items: items.map(finishItem), summary, header: !!docHasHeader };
+}
+
+function sectionText(pre) {
+  const parts = [];
+  for (const t of pre) {
+    if (ATTR.some(([k, re]) => k === "skip" && re.test(t))) continue;
+    if (/^[^:]{1,40}:\s*$/.test(t)) { parts.push(t); continue; }
+    if (parts.length && /:\s*$/.test(parts[parts.length - 1])) parts[parts.length - 1] += " " + t;
+    else parts.push(t);
+  }
+  return parts.filter(p => !/:\s*$/.test(p)).join(" | ").slice(0, 240);
+}
+
+function finishItem(it) {
+  const desc = [...it.descParts];
+  const notes = [...it.notes];
+  let descLines = 0;
+  for (const t of it.cont) {
+    let matched = false;
+    for (const [key, re] of ATTR) {
+      const m = t.match(re);
+      if (m) { matched = true; if (key !== "skip") it[key] = it[key] || m[1].trim(); break; }
+    }
+    if (matched) continue;
+    if (KV_RE.test(t)) { notes.push(t); continue; }
+    if (descLines < 3) { desc.push(t); descLines++; } else notes.push(t);
+  }
+  const gross = it.t;
+  let lineTotal = it.net != null ? it.net : (it.discAmt != null ? gross - it.discAmt : gross);
+  lineTotal = Math.round(lineTotal * 100) / 100;
+  let discPct = it.discPct;
+  if (discPct == null && lineTotal < gross - 0.01 && gross > 0) discPct = Math.round((1 - lineTotal / gross) * 10000) / 100;
+  if (it.section) notes.unshift(`Section: ${it.section}`);
+  let description = desc.join(" ").replace(/\s+/g, " ").trim();
+  if (!description && it.pn) description = it.pn;
+  return makeItem({
+    pos: it.pos, pn: it.pn, description, quantity: it.q, unit: it.unit, unitPrice: it.p,
+    discountPct: discPct, netUnitPrice: it.q ? Math.round((lineTotal / it.q) * 10000) / 10000 : it.p,
+    lineTotal, deliveryDate: it.deliveryDate, leadTime: it.leadTime, hsCode: it.hsCode, origin: it.origin,
+    notes: notes.join("; "), rowCheck: it.verified,
+  });
+}
+
+/* ============================================================
+   6. DOCUMENT METADATA (supplier, quote no., dates, terms, currency)
+   ============================================================ */
+const LABELS = {
+  quoteStrict: /\b(quotation|quote|offer|proforma(?:\s+invoice)?|angebot|rfq|estimate)\s*(no\.?|number|nr\.?|#|ref\.?|id)/i,
+  quoteLoose: /\b(quotation|quote|offer|proforma|angebot|estimate)\b|عرض سعر/i,
+  date: /(^|[\s\/])(date|datum|التاريخ)\b/i,
+  dateExclude: /deliver|valid|due|expir|invoice|order|ship|lieferung|birth/i,
+  valid: /\bvalid(ity)?\b|expir|gültig|صلاحية/i,
+  payment: /terms of payment|payment terms?|payment condition|terms\s*&\s*conditions of payment|zahlungs|^payment\b|شروط الدفع/i,
+  delivery: /terms of delivery|delivery terms|incoterms?|delivery condition|shipping terms|lieferbedingung|شروط التسليم/i,
+  lead: /est\.?\s*delivery|delivery time|lead\s*time|delivery period|time of delivery|lieferzeit|مدة التوريد/i,
+};
+const ALL_LABELS = Object.values(LABELS);
+const INCOTERM_RE = /\b(EXW|FCA|FAS|FOB|CFR|CNF|CIF|CPT|CIP|DAP|DPU|DAT|DDP|DDU)\b/;
+
+function overlapCells(line, x0, x1, pad) {
+  return line.cells.filter(c => c.x1 >= x0 - pad && c.x0 <= x1 + pad);
+}
+
+function findField(lines, labelRe, accept, opts = {}) {
+  const maxRight = opts.maxRight || 12;
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
+    for (let ci = 0; ci < L.cells.length; ci++) {
+      const cell = L.cells[ci];
+      const m = cell.text.match(labelRe);
+      if (!m || (opts.exclude && opts.exclude.test(cell.text))) continue;
+      const cands = [];
+      cands.push(cell.text.slice(m.index + m[0].length));
+      const right = L.cells[ci + 1];
+      if (right && right.x0 - cell.x1 < maxRight * L.fs) cands.push(right.text);
+      // values printed under the label: any line up to ~4 label-heights below
+      for (let k = i + 1; k < lines.length; k++) {
+        const N = lines[k];
+        if (N.page !== L.page || N.y - L.y > 4.2 * L.fs) break;
+        for (const oc of overlapCells(N, cell.x0, cell.x1, 1.5 * L.fs)) cands.push(oc.text);
+      }
+      for (let raw of cands) {
+        const v = String(raw || "").replace(/^[\s:;.,\/\-–#]+/, "").trim();
+        if (!v || ALL_LABELS.some(re => re.test(v) && v.length < 40 && !accept(v))) continue;
+        const got = accept(v);
+        if (got) return got;
+      }
+    }
+  }
+  return "";
+}
+
+function extractMeta(lines) {
+  const top = lines.filter(l => l.page === 1);
+  const acceptNo = v => {
+    const toks = v.split(/\s+/).map(t => t.replace(/[.,;:]+$/, ""))
+      .filter(t => t.length >= 4 && /\d/.test(t) && !DATE_RE.test(t) && !DATE_FIND.test(t) && /^[A-Z0-9][\w\-\/.]*$/i.test(t));
+    return toks[0] || "";
+  };
+  const acceptDate = v => { const m = v.match(DATE_FIND); return m ? m[0] : ""; };
+  const acceptLastDate = v => {
+    const all = v.match(new RegExp(DATE_FIND.source, "gi"));
+    if (all) return all[all.length - 1];
+    const d = v.match(/\b\d+\s*(days?|weeks?|months?)\b/i);
+    return d ? d[0] : "";
+  };
+  const acceptText = v => (v.length >= 2 && /[a-z0-9]/i.test(v) && !/^\(.*\)$/.test(v) ? v.slice(0, 120) : "");
+  const acceptIncoterm = v => (INCOTERM_RE.test(v) ? v.replace(/^[;,\s]+/, "").slice(0, 80) : "");
+
+  const meta = {};
+  meta.quoteNo = findField(top, LABELS.quoteStrict, acceptNo, { maxRight: 30 }) || findField(top, LABELS.quoteLoose, acceptNo, { maxRight: 40 });
+  meta.date = findField(top, LABELS.date, acceptDate, { exclude: LABELS.dateExclude });
+  if (!meta.date) { for (const l of top) { const m = l.flat.match(DATE_FIND); if (m) { meta.date = m[0]; break; } } }
+  meta.validUntil = findField(top, LABELS.valid, acceptLastDate);
+  meta.paymentTerms = findField(lines, LABELS.payment, acceptText, { maxRight: 8 });
+  meta.deliveryTerms = findField(lines, LABELS.delivery, acceptIncoterm, { maxRight: 8 }) || findField(lines, LABELS.delivery, acceptText, { maxRight: 8 });
+  const inc = (meta.deliveryTerms.match(INCOTERM_RE) || [])[1];
+  meta.incoterm = inc || "";
+  meta.leadTime = findField(top, LABELS.lead, acceptText, { maxRight: 8 });
+  return meta;
+}
+
+const KNOWN_SUPPLIERS = [
+  [/krones/i, "Krones"], [/\bkhs\b/i, "KHS"], [/tetra\s?pak/i, "Tetra Pak"], [/sidel/i, "Sidel"],
+  [/\bsmi\s?(s\.?p\.?a|group)|smigroup/i, "SMI"], [/husky/i, "Husky"], [/netstal/i, "Netstal"],
+  [/\bengel\b/i, "Engel"], [/arburg/i, "Arburg"], [/festo/i, "Festo"], [/\bsmc\b/i, "SMC"],
+  [/atlas\s?copco/i, "Atlas Copco"], [/\bgea\b/i, "GEA"], [/alfa\s?laval/i, "Alfa Laval"],
+  [/kieselmann/i, "Kieselmann"], [/veolia/i, "Veolia"], [/siemens/i, "Siemens"], [/\babb\b/i, "ABB"],
+  [/schneider/i, "Schneider Electric"], [/endress/i, "Endress+Hauser"], [/danfoss/i, "Danfoss"],
+  [/grundfos/i, "Grundfos"], [/domino/i, "Domino"], [/videojet/i, "Videojet"], [/sew[\s-]?euro/i, "SEW-Eurodrive"],
+  [/krohne/i, "Krohne"], [/\bsick\b/i, "SICK"], [/\bifm\b/i, "ifm"], [/\bpall\b/i, "Pall"], [/markem/i, "Markem-Imaje"],
+];
+const COMPANY_RE = /\b(FZE|FZCO|FZC|FZ[\s-]?LLC|L\.?L\.?C\.?|LTD\.?|LIMITED|GMBH|AG|S\.?A\.?S?|S\.?P\.?A\.?|S\.?R\.?L\.?|B\.?V\.?|N\.?V\.?|INC\.?|CORP(ORATION)?\.?|CO\.|COMPANY|EST\.?|ESTABLISHMENT|TRADING|INDUSTRIES|GROUP|PLC|PTE|PVT|KG|شركة|مؤسسة)(?=\s|$|,)/i;
+const BUYER_LABEL = /\b(buyer|bill(ed)? to|ship(ped)? to|sold to|deliver(y)? to|consignee|customer|messrs|attn|to\s*:)|العميل/i;
+
+function detectSupplier(lines) {
+  const first = lines.filter(l => l.page === 1);
+  // cells under a "Buyer / Ship to / Bill to / Customer" label belong to us, not the supplier
+  const buyerZone = [];
+  first.forEach((l, i) => l.cells.forEach(c => {
+    if (BUYER_LABEL.test(c.text)) buyerZone.push({ i, x0: c.x0, x1: Math.max(c.x1, c.x0 + 200) });
+  }));
+  const inBuyerZone = (i, c) => buyerZone.some(z => i >= z.i && i <= z.i + 7 && c.x0 >= z.x0 - 30 && c.x0 <= z.x1);
+  const cands = [];
+  first.forEach((l, i) => {
+    l.cells.forEach(c => {
+      const t = c.text;
+      if (!COMPANY_RE.test(t) || CONFIG.OWN_COMPANY.test(t) || t.split(" ").length > 9 || /bank/i.test(t)) return;
+      if (BUYER_LABEL.test(t) || inBuyerZone(i, c)) return;
+      if (/\b(road|street|st\.|area|district|box|floor|building|zone|city|avenue|ave\.)\b/i.test(t) && /\d/.test(t)) return;
+      cands.push({ t: t.replace(/\s+(bank|tel|p\.?o\.?)\b.*$/i, "").trim(), top: l.y / (l.pageH || 1) });
+    });
+  });
+  const rank = c => (c.top > 0.8 ? c.top + 1 : c.top); // headers first, page footers second
+  cands.sort((a, b) => rank(a) - rank(b));
+  const legal = cands.length ? cands[0].t : "";
+  const all = lines.map(l => l.flat).join("\n");
+  for (const [re, name] of KNOWN_SUPPLIERS) if (legal && re.test(legal)) return { name, legal };
+  // company line not found or not a known brand: try website / e-mail domain
+  const doms = [...all.matchAll(/(?:www\.|@)([a-z0-9-]+)\.(?:com|net|org|de|ch|it|nl|ae|sa|co|eu|fr|es|se|dk|at|be|in|cn|uk)\b/gi)]
+    .map(m => m[1].toLowerCase()).filter(d => !CONFIG.OWN_COMPANY.test(d) && !/gmail|hotmail|yahoo|outlook/.test(d));
+  if (!legal) {
+    for (const d of doms) for (const [re, name] of KNOWN_SUPPLIERS) if (re.test(d)) return { name, legal: "" };
+    for (const [re, name] of KNOWN_SUPPLIERS) if (re.test(first.slice(0, 8).map(l => l.flat).join(" "))) return { name, legal: "" };
+    if (doms.length) return { name: doms[0].charAt(0).toUpperCase() + doms[0].slice(1), legal: "" };
+    return { name: "", legal: "" };
+  }
+  const short = legal.replace(/(\s+(co\.?|company|ltd\.?|limited|llc|l\.l\.c\.?|fze|fzco|fzc|fz-llc|gmbh|ag|s\.?a\.?|s\.?p\.?a\.?|inc\.?|corp\.?|est\.?|establishment|trading|plc|pvt|pte|kg)[.,]?)+\s*$/i, "").trim();
+  return { name: short || legal, legal };
+}
+
+function detectCurrency(lines, boiler) {
+  const score = {};
+  const add = (c, w) => { score[c] = (score[c] || 0) + w; };
+  const MAP = { "€": "EUR", "$": "USD", "£": "GBP", "SR": "SAR", "RMB": "CNY" };
+  lines.forEach((l, i) => {
+    if (boiler.has(i) || BOILER_RE.test(l.flat)) return;
+    const w = /price|total|amount|currency|value|subtotal/i.test(l.flat) ? 3 : 1;
+    for (const m of l.flat.matchAll(/\b(EUR|USD|SAR|AED|CHF|GBP|CNY|RMB|JPY|EGP|KWD|QAR|BHD|OMR|INR|TRY|SEK|DKK|NOK|CAD|AUD)\b|€|£|\$|ر\.س|ريال|\bSR\b/g)) {
+      const k = m[0];
+      add(MAP[k] || (/ر\.س|ريال/.test(k) ? "SAR" : k.toUpperCase()), w);
+    }
+  });
+  const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
+  return best ? best[0] : "";
+}
+
+/* ============================================================
+   7. RECONCILIATION - does the sum of lines match the document?
+   ============================================================ */
+function reconcile(items, summary) {
+  const net = items.reduce((s, it) => s + (it.lineTotal != null ? it.lineTotal : it.quantity * it.unitPrice), 0);
+  const gross = items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
+  const round = v => Math.round(v * 100) / 100;
+  const out = { linesTotal: round(net), status: "none", matched: null, message: "" };
+  if (!items.length) { out.message = "No line items found."; return out; }
+  const targets = summary.filter(s => !/^(vat|tax|freight|shipping|transport|packing|packaging|handling|insurance|customs|ضريبة)/i.test(s.label));
+  const tol = Math.max(0.05, net * 0.0005);
+  const hit = targets.find(s => Math.abs(s.amount - net) <= tol);
+  if (hit) { out.status = "ok"; out.matched = hit; out.message = `Lines add up to the document's "${hit.label}" (${fmtNum(hit.amount)}).`; return out; }
+  if (!summary.length) { out.message = "No total found in the document to verify against."; return out; }
+  const gHit = targets.find(s => Math.abs(s.amount - gross) <= tol);
+  out.status = "mismatch";
+  if (gHit) out.message = `Lines match "${gHit.label}" only before discounts - check the discount lines.`;
+  else {
+    const ref = targets[0] || summary[0];
+    out.message = `Lines total ${fmtNum(net)} vs document "${ref.label}" ${fmtNum(ref.amount)} - difference ${fmtNum(ref.amount - net)}. Some lines may be missing or misread.`;
+  }
+  return out;
+}
+
+function summaryFacts(summary) {
+  const pick = re => { const s = summary.filter(x => re.test(x.label)); return s.length ? s[s.length - 1].amount : null; };
+  const totals = summary.filter(x => /total|amount|sum|الإجمالي|المجموع/i.test(x.label));
+  return {
+    freight: pick(/freight|shipping|transport/i),
+    vat: pick(/^(vat|tax)\b|ضريبة/i),
+    docTotal: totals.length ? totals[totals.length - 1].amount : null,
+  };
+}
+
+function fmtNum(v) {
+  return v == null || !isFinite(v) ? "" : Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* ============================================================
+   8. ONE DOCUMENT -> RESULT
+   ============================================================ */
+function makeItem(fields) {
+  return Object.assign({
+    source: "", quoteNo: "", pos: "", distributorPn: "", pn: "", description: "", quantity: 0, unit: "",
+    unitPrice: 0, discountPct: null, netUnitPrice: null, lineTotal: null, currency: "",
+    deliveryDate: "", leadTime: "", hsCode: "", origin: "",
+    material: "", shape: "", threadSize: "", tubeSize: "", notes: "", rowCheck: true,
+  }, fields);
+}
+
+function linesToLegacyText(lines) {
+  const out = [];
+  let page = lines.length ? lines[0].page : 1;
+  for (const l of lines) {
+    if (l.page !== page) { out.push(""); page = l.page; }
+    out.push(l.flat);
+  }
+  out.push("");
+  // conservative repair only: "3 5 .00" style gaps directly before a decimal point
+  return out.join("\n").replace(/(\d) (\.\d{2})(?!\d)/g, "$1$2");
+}
+
+function festoEnrich(items, text) {
+  if (!/festo|arcoma/i.test(text)) return;
+  for (const it of items) {
+    if (it.shape) continue;
+    const cand = [it.pn, ...String(it.description).split(/\s+/)].find(t => t && festoDecode(t).matched);
+    if (!cand) continue;
+    const s = festoDecode(cand);
+    Object.assign(it, { material: s.material, shape: s.shape, threadSize: s.threadSize, tubeSize: s.tubeSize });
+    if (!it.pn || it.pn !== cand) { it.distributorPn = it.distributorPn || it.pn; it.pn = cand; }
+  }
+}
+
+function analyzeDocument(pages, filename, opts = {}) {
+  let lines = [];
+  for (const pg of pages) lines.push(...buildLines(pg));
+  const fmt = detectNumberFormat(lines);
+  let gen = parseGeneric(lines, fmt);
+  if (!gen.items.length && /[٠-٩۰-۹]/.test(lines.map(l => l.flat).join(""))) {
+    const conv = lines.map(l => ({ ...l, flat: normDigits(l.flat), text: normDigits(l.text), cells: l.cells.map(c => ({ ...c, text: normDigits(c.text) })) }));
+    const g2 = parseGeneric(conv, detectNumberFormat(conv));
+    if (g2.items.length) { gen = g2; lines = conv; }
+  }
+  const boiler = detectBoiler(lines);
+  const meta = extractMeta(lines);
+  meta.currency = detectCurrency(lines, boiler);
+  const sup = detectSupplier(lines);
+  const rawText = linesToLegacyText(lines);
+  const genCheck = reconcile(gen.items, gen.summary);
+
+  // Supplier-specific rules (kept from v1) run as a second opinion.
+  let legacy = null;
+  for (const parser of PARSERS) {
+    if (!parser.detect(rawText)) continue;
+    try {
+      const its = parser.parse(rawText).map(it => makeItem(Object.assign({}, it, {
+        lineTotal: Math.round(it.quantity * it.unitPrice * 100) / 100, netUnitPrice: it.unitPrice,
+      })));
+      legacy = { name: parser.name, items: its, check: reconcile(its, gen.summary) };
+    } catch (e) { legacy = null; }
+    break;
+  }
+
+  let items = gen.items, engine = opts.ocr ? "OCR + layout engine" : "Layout engine", check = genCheck;
+  if (legacy && legacy.items.length) {
+    const lOk = legacy.check.status === "ok", gOk = genCheck.status === "ok";
+    const legacyRicher = legacy.items.some(it => it.shape || it.distributorPn);
+    const useLegacy = (lOk && !gOk) ||
+      (lOk && gOk && (legacy.items.length > gen.items.length || (legacy.items.length === gen.items.length && legacyRicher))) ||
+      (!lOk && !gOk && legacy.items.length > gen.items.length);
+    if (useLegacy) { items = legacy.items; engine = `Supplier rules (${legacy.name})`; check = legacy.check; }
+  }
+  const supplierName = (legacy && engine.startsWith("Supplier") ? legacy.name : "") || sup.name || (legacy ? legacy.name : "") || "Unknown supplier";
+  items.forEach(it => {
+    it.source = supplierName;
+    it.quoteNo = meta.quoteNo;
+    if (!it.currency || !engine.startsWith("Supplier")) it.currency = meta.currency || it.currency;
+  });
+  festoEnrich(items, rawText);
+  const facts = summaryFacts(gen.summary);
+  let warning = null;
+  if (!items.length) warning = "No line items found. If this is a scanned quotation, tick \"Force OCR\" and extract again.";
+  else if (check.status === "mismatch") warning = check.message;
+  return {
+    filename, supplier: supplierName, supplierLegal: sup.legal, engine, meta, items,
+    summary: gen.summary, facts, check, warning, rawText, numberFormat: fmt,
+  };
+}
+
+
+/* ============================================================
+   SUPPLIER PARSERS
+   Each parser: { name, detect(text) -> bool, parse(text) -> Item[] }
+   Item: { source, distributorPn, pn, description, quantity,
+           unitPrice, currency, material, shape, threadSize,
+           tubeSize, notes }
+   To add a new supplier: copy one of these objects, adjust
+   detect()/parse(), and push it into PARSERS below.
+   ============================================================ */
+
+
+// Line-item pattern in a Krones "Sales Quotation" PDF:
+//   002 0901462620                          1.00  PCE   650.07   650.07
+//   FILTER INSERT
+//   Pos No.: 010020
+//   ...
+// Note: some PDF renderers glue the PN and quantity together with no
+// space at all ("09014626201.00" instead of "0901462620 1.00"). PN
+// is always an 8+ digit code and quantity is a short "N.NN" number,
+// so \d{8,} backtracks to find the split point either way.
+const _ITEM_PAT = /^\s*(\d{3})\s+(\d{8,})\s*(\d{1,4}\.\d{2})\s+PCE\s+([\d,]+\.\d{2})\s+[\d,]+\.\d{2}\s*$\n+\s*(.+?)\n/gm;
+
+const KronesParser = {
+  name: "Krones",
+  detect: (text) => text.includes("Krones Middle East Africa") && text.includes("Sales Quotation"),
+  parse(text) {
+    const items = [];
+    let m;
+    while ((m = _ITEM_PAT.exec(text)) !== null) {
+      const [, , pn, qty, price, desc] = m;
+      items.push(makeItem({
+        source: this.name, pn: pn.trim(), description: desc.trim(),
+        quantity: parseFloat(qty), unitPrice: parseFloat(price.replace(/,/g, "")), currency: "EUR",
+      }));
+    }
+    return items;
+  },
+};
+
+const KHSParser = {
+  name: "KHS",
+  detect: (text) => text.includes("KHS ME FZCO"),
+  parse(text) {
+    const items = [];
+    const re = /^\s*(\d{6})\s+(\S+)\s+(.*?)\s+(\d+)\s+(PCE|SET|M)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/gm;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const [, , pn, desc, qty, , unitPrice] = m;
+      items.push(makeItem({
+        source: this.name, pn: pn.trim(),
+        description: desc.trim().replace(/_+$/, "").trim(),
+        quantity: parseFloat(qty), unitPrice: parseFloat(unitPrice.replace(/,/g, "")), currency: "EUR",
+      }));
+    }
+    return items;
+  },
+};
+
+const AlhuwaisParser = {
+  // Note: this vendor's PDF wraps each item's part number and
+  // description across several physical lines, and the row number
+  // ends up on a different line than the part number once the PDF is
+  // flattened to text - so this parser works in "blocks" instead of a
+  // single-line regex: every line starting "CODE; ..." begins a new
+  // item, and everything up to the next such line (or the totals
+  // footer) belongs to that item, with the qty/price pulled out of
+  // whichever line inside the block has them.
+  name: "Alhuwais (SKF)",
+  detect: (text) => text.includes("Hamad Abdullah Alhuwais") || text.toUpperCase().includes("ALHUWAISARABIAN"),
+  parse(text) {
+    const lines = text.split("\n").map(l => l.trim()).filter(l => l.length);
+    const startRe = /^([A-Za-z0-9][\w.\/-]*)\s*;\s*(.+)$/;
+    const dataRe = /(\d+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(\S+)\s*$/;
+    const skipRe = /Total Before Tax|Disc\. Rate|VAT|Total Value|Prepared By|^Delivery:|^Payment:|^Validity:|^Tel:|P\.O\. Box|Email|Riyal|^www\./i;
+
+    const starts = [];
+    lines.forEach((l, i) => { if (startRe.test(l)) starts.push(i); });
+
+    const items = [];
+    for (let s = 0; s < starts.length; s++) {
+      const startIdx = starts[s];
+      const endIdx = s + 1 < starts.length ? starts[s + 1] : lines.length;
+      const block = lines.slice(startIdx, endIdx).filter(l => !skipRe.test(l));
+      if (!block.length) continue;
+
+      const m0 = block[0].match(startRe);
+      const pn = m0[1];
+      let qty = null, price = null, dataLineIdx = -1;
+      const descParts = [m0[2]];
+
+      for (let idx = 1; idx < block.length; idx++) {
+        let l = block[idx];
+        const dm = l.match(dataRe);
+        if (dm) {
+          qty = parseFloat(dm[1]);
+          price = parseFloat(dm[2].replace(/,/g, ""));
+          l = l.slice(0, dm.index).trim().replace(/^\d+\s+/, "");
+          dataLineIdx = idx;
+          if (l) descParts.push(l);
+          continue;
+        }
+        if (dataLineIdx !== -1 && idx > dataLineIdx + 1) break; // one continuation line past the data line
+        if (l) descParts.push(l);
+      }
+      if (qty === null) continue; // no qty/price found in this block - not a real item row
+
+      items.push(makeItem({
+        source: this.name, pn: pn.trim(),
+        description: descParts.join(" ").replace(/\s+/g, " ").trim(),
+        quantity: qty, unitPrice: price, currency: "SAR",
+      }));
+    }
+    return items;
+  },
+};
+
+function splitCodeAndDescription(s) {
+  const parts = s.split(" - ");
+  if (parts.length !== 2) return ["", s.trim()];
+  const looksLikeCode = (x) => !x.includes(" ") && /\d/.test(x) && /^[A-Za-z0-9/.,-]+$/.test(x) && x === x.toUpperCase();
+  const [a, b] = [parts[0].trim(), parts[1].trim()];
+  if (looksLikeCode(a) && !looksLikeCode(b)) return [a, b];
+  if (looksLikeCode(b) && !looksLikeCode(a)) return [b, a];
+  return looksLikeCode(a) ? [a, b] : [b, a];
+}
+
+const ArcomaParser = {
+  name: "ARCOMA (Festo)",
+  detect: (text) => text.includes("ARCOMA Arabia Commercial Agency"),
+  parse(text) {
+    const items = [];
+    const re = /^\s*(TC\d+)\s+(.+?)\s+(\*{1,2})?\s*(\d+\.\d{2})\s+(\d+\.\d{2})\s+([\d,]+\.\d{2})\s*$/gm;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const [, distPn, descRaw, , qty, price] = m;
+      const [pn, desc] = splitCodeAndDescription(descRaw);
+      const spec = festoDecode(pn);
+      let fullDesc;
+      if (spec.matched) {
+        const bits = [spec.shape];
+        const specs = [];
+        if (spec.threadSize) specs.push(`${spec.threadSize} thread`);
+        if (spec.tubeSize) specs.push(`${spec.tubeSize} tube`);
+        if (specs.length) bits.push(specs.join(", "));
+        fullDesc = bits.join(" - ");
+      } else {
+        fullDesc = desc;
+      }
+      items.push(makeItem({
+        source: this.name, distributorPn: distPn.trim(), pn: pn || distPn.trim(),
+        description: fullDesc, quantity: parseFloat(qty), unitPrice: parseFloat(price.replace(/,/g, "")),
+        currency: "SAR", material: spec.material, shape: spec.shape,
+        threadSize: spec.threadSize, tubeSize: spec.tubeSize,
+        notes: spec.matched ? "" : "Could not auto-decode PN - verify against Festo catalogue",
+      }));
+    }
+    return items;
+  },
+};
+
+/* ============================================================
+   SHARED HELPERS FOR "SIMPLE TABLE" SUPPLIERS
+   Most vendor PDFs put PN + description-start + qty/price all on
+   one physical line, with only the description wrapping onto the
+   following line(s). scanLines() finds every line matching a
+   supplier's row pattern and greedily grabs the description
+   continuation lines that follow, stopping at the next item row or
+   at an obvious non-description line (a delivery/payment footer,
+   a totals line, etc).
+   ============================================================ */
+function parseEuroNumber(s) { return parseFloat(s.replace(/\./g, "").replace(",", ".")); }
+function parseUSNumber(s) { return parseFloat(s.replace(/,/g, "")); }
+
+const STOP_GENERIC = /^(Delivery time:|Mode of delivery:|Terms of delivery:|No return|Total |Freight|VAT|Your reference:|Page \d|Tel:|Fax:|www\.|Bank:|IBAN|SWIFT|Despatch date|Payment|Shipping|Your partcode:)/i;
+
+function scanLines(text, lineRe, stopRe) {
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(lineRe);
+    if (!m) continue;
+    const extra = [];
+    for (let j = i + 1; j < lines.length && extra.length < 4; j++) {
+      const l = lines[j];
+      if (lineRe.test(l)) break;
+      if (stopRe.test(l)) break;
+      if (/^\*+$/.test(l)) continue;
+      extra.push(l);
+    }
+    out.push({ m, extra });
+  }
+  return out;
+}
+
+/* ---------- Tetra Pak (covers both "Upgrade Quotation" and standard "Quotation" layouts) ---------- */
+const TetraPakParser = {
+  name: "Tetra Pak",
+  detect: (text) => text.includes("Tetra Pak") || text.toLowerCase().includes("tetrapak.com"),
+  parse(text) {
+    const lineRe = /^(\d+)\s+(\S.*?)\s{2,}(.+?)\s+(\d+)\s+(Set|Pcs|pc)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})(?:\s+\d{2}\.\d{2}\.\d{4})?$/;
+    return scanLines(text, lineRe, STOP_GENERIC).map(({ m, extra }) => makeItem({
+      source: this.name, pn: m[2].trim(),
+      description: [m[3], ...extra].join(" ").replace(/\s+/g, " ").trim(),
+      quantity: parseFloat(m[4]), unitPrice: parseUSNumber(m[6]), currency: "USD",
+    }));
+  },
+};
+
+/* ---------- GEA / GRADE Refrigeration ---------- */
+const GEAParser = {
+  name: "GEA (GRADE Refrigeration)",
+  detect: (text) => text.includes("GRADE Refrigeration") || text.includes("grasso-adearest.com"),
+  parse(text) {
+    const lineRe = /^([A-Z]+(?:-[A-Z0-9]+)+)\s+(.+?)\s+(\d+\.\d{2})\s+Pcs\.\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/;
+    return scanLines(text, lineRe, STOP_GENERIC).map(({ m, extra }) => makeItem({
+      source: this.name, pn: m[1].trim(),
+      description: [m[2], ...extra].join(" ").replace(/\s+/g, " ").trim(),
+      quantity: parseFloat(m[3]), unitPrice: parseUSNumber(m[4]), currency: "EUR",
+    }));
+  },
+};
+
+/* ---------- Surdry ---------- */
+const SurdryParser = {
+  name: "Surdry",
+  detect: (text) => text.includes("SURDRY"),
+  parse(text) {
+    const lineRe = /^(\d{6,7})\s+(.+?)\s+(\d+\.\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})$/;
+    return scanLines(text, lineRe, STOP_GENERIC).map(({ m }) => makeItem({
+      source: this.name, pn: m[1].trim(), description: m[2].trim(),
+      quantity: parseFloat(m[3]), unitPrice: parseEuroNumber(m[4]), currency: "EUR",
+    }));
+  },
+};
+
+/* ---------- Lan Handling Technologies ---------- */
+const LanHandlingParser = {
+  name: "Lan Handling",
+  detect: (text) => text.includes("Lan Handling Technologies") || text.includes("lanhandling.com"),
+  parse(text) {
+    const lineRe = /^(\d{3}\/\d{3})\s+(\S+)\s+(.+?)\s+(\d+)\s+(Stuks|Pce|Pcs)\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})$/;
+    const lines = text.split("\n").map(l => l.trim()).filter(l => l.length);
+    const items = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(lineRe);
+      if (!m) continue;
+      let notes = "";
+      if (i + 1 < lines.length) {
+        const pc = lines[i + 1].match(/^Your partcode:\s*(.+)$/i);
+        if (pc) notes = `Distributor's code: ${pc[1].trim()}`;
+      }
+      items.push(makeItem({
+        source: this.name, pn: m[2].trim(), description: m[3].trim(),
+        quantity: parseFloat(m[4]), unitPrice: parseEuroNumber(m[6]), currency: "EUR", notes,
+      }));
+    }
+    return items;
+  },
+};
+
+/* ---------- Netstal ---------- */
+const NetstalParser = {
+  name: "Netstal",
+  detect: (text) => text.includes("NETSTAL"),
+  parse(text) {
+    const lineRe = /^(\d{5})\s+(\d+)\s+(PC|PCS|SET)\s+(\S+)\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})$/;
+    return scanLines(text, lineRe, STOP_GENERIC).map(({ m }) => makeItem({
+      source: this.name, pn: m[4].trim(), description: m[5].trim(),
+      quantity: parseFloat(m[2]), unitPrice: parseEuroNumber(m[6]), currency: "CHF",
+    }));
+  },
+};
+
+/* ---------- Kieselmann ---------- */
+const KieselmannParser = {
+  name: "Kieselmann",
+  detect: (text) => text.includes("KIESELMANN"),
+  parse(text) {
+    const lineRe = /^(\d+(?:\.\d+)?)\s+(\S+)\s+(\d+)\s+piece\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})$/;
+    const stop = /^(Total Amount|Freight Charges|Packing|Despatch date|Payment|Shipping|The majority)/i;
+    return scanLines(text, lineRe, stop).map(({ m, extra }) => makeItem({
+      source: this.name, pn: m[2].trim(),
+      description: extra.join(" ").replace(/\s+/g, " ").trim(),
+      quantity: parseFloat(m[3]), unitPrice: parseEuroNumber(m[4]), currency: "EUR",
+    }));
+  },
+};
+
+/* ---------- Atlas Copco ---------- */
+const AtlasCopcoParser = {
+  name: "Atlas Copco",
+  detect: (text) => text.includes("Atlas Copco") || text.includes("atlascopco.com"),
+  parse(text) {
+    const lineRe = /^(\d{6,10})\s+(.+?)\s+(\d+)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(\d+\.\d{2})\s+([\d,]+\.\d{2})$/;
+    return scanLines(text, lineRe, STOP_GENERIC).map(({ m, extra }) => makeItem({
+      source: this.name, pn: m[1].trim(),
+      description: [m[2], ...extra].join(" ").replace(/\s+/g, " ").trim(),
+      quantity: parseFloat(m[3]), unitPrice: parseUSNumber(m[4]), currency: "SAR",
+    }));
+  },
+};
+
+/* ---------- Parker (via Addamegh For Industrial Solutions) ----------
+   This vendor's PDF mixes Arabic and English text with bidirectional
+   formatting marks that scramble in plain-text extraction, plus a
+   duplicate row of Eastern Arabic-Indic numerals under every real row.
+   Stripping everything outside the ASCII range removes both problems
+   in one pass, since none of the real data (part numbers, quantities,
+   prices) needs non-ASCII characters. */
+const ParkerParser = {
+  name: "Parker (Addamegh)",
+  detect: (text) => text.includes("ADDAMEGH") || text.includes("addameghgroup.com"),
+  parse(text) {
+    const lineRe = /^(\d+)\s+\[Parker\]\s+(\S+)\s+(.+?)\s+(\d+)\s+(\d+\.\d{2})\s+Units?\s+([\d,]+\.\d{2})\s+(\d+\.\d{2})\s+([\d,]+\.\d{2})\s+(\d+\.\d{2})\s+([\d,]+\.\d{2})$/;
+    const lines = text.split("\n").map(l => l.replace(/[^\x00-\x7F]/g, "").replace(/\s+/g, " ").trim()).filter(l => l.length);
+    const items = [];
+    for (const l of lines) {
+      const m = l.match(lineRe);
+      if (!m) continue;
+      items.push(makeItem({
+        source: this.name, pn: m[2].trim(), description: m[3].trim(),
+        quantity: parseFloat(m[5]), unitPrice: parseUSNumber(m[6]), currency: "SAR",
+        notes: "Part number may be truncated if it contains embedded spaces - check against the source PDF.",
+      }));
+    }
+    return items;
+  },
+};
+
+/* ---------- Veolia (Water Technologies) ----------
+   This one doesn't rely on line breaks at all - some PDF renderers
+   (notably pdf.js falling back to "fake worker" mode, which happens
+   on some mobile browsers) reconstruct this document's lines
+   differently every time, which broke earlier line-based attempts.
+   Instead: flatten the whole page to one continuous string, find
+   every "<qty> EA. <price> <price>" occurrence (an item's data), and
+   for each one look backward for the nearest "PARTCODE," (a real
+   Veolia part number always starts with a letter, unlike the plain
+   spec numbers like "55985" that appear inside descriptions). This
+   only depends on reading order being roughly preserved, not on any
+   particular line-grouping. */
+const VeoliaParser = {
+  name: "Veolia",
+  detect: (text) => text.toLowerCase().includes("veolia"),
+  parse(text) {
+    const flat = text.replace(/\s+/g, " ").trim();
+    // Tolerant on purpose: some PDF renderers (confirmed on mobile) insert a
+    // stray space before punctuation ("W3T564893 , PM KIT" instead of
+    // "W3T564893, PM KIT") when the source PDF encodes text in many small
+    // runs. \s* around the comma and around "EA." absorbs that without
+    // requiring the text to be pristine.
+    const anchorRe = /(\d{1,3})\s*EA\s*\.?\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/g;
+    const pnRe = /\b([A-Z][A-Z0-9]{4,})\s*,/g;
+
+    const anchors = [];
+    let m;
+    while ((m = anchorRe.exec(flat)) !== null) {
+      anchors.push({ start: m.index, end: m.index + m[0].length, qty: m[1], price: m[2] });
+    }
+    const pns = [];
+    while ((m = pnRe.exec(flat)) !== null) {
+      pns.push({ start: m.index, pn: m[1], commaEnd: m.index + m[0].length });
+    }
+
+    const items = [];
+    let searchFrom = 0;
+    for (const a of anchors) {
+      let chosen = null;
+      for (const p of pns) {
+        if (p.start >= searchFrom && p.start < a.start) chosen = p;
+      }
+      if (!chosen) { searchFrom = a.end; continue; }
+      let desc = flat.slice(chosen.commaEnd, a.start).trim();
+      desc = desc.replace(/\s+\d+\s*\.\s*UV SYSTEM.*$/i, "").trim(); // drop trailing "1. UV SYSTEM..." grouping noise only
+      desc = desc.replace(/\s+-\s+/g, "-").replace(/\s+,/g, ","); // re-tighten stray punctuation spacing
+      items.push(makeItem({
+        source: this.name, pn: chosen.pn, description: desc,
+        quantity: parseFloat(a.qty), unitPrice: parseUSNumber(a.price), currency: "SAR",
+      }));
+      searchFrom = a.end;
+    }
+    return items;
+  },
+};
+
+const PARSERS = [
+  KronesParser, KHSParser, AlhuwaisParser, ArcomaParser,
+  TetraPakParser, GEAParser, SurdryParser, LanHandlingParser,
+  NetstalParser, KieselmannParser, AtlasCopcoParser, ParkerParser,
+  VeoliaParser,
+];
+
+/* ============================================================
+   9. PIPELINE - text PDFs, scanned PDFs and images
+   ============================================================ */
+const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+let _ocrWorker = null;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = resolve; s.onerror = () => reject(new Error("Could not load the OCR library (internet connection needed for scanned files)."));
+    document.head.appendChild(s);
+  });
+}
+
+async function getOcrWorker() {
+  if (_ocrWorker) return _ocrWorker;
+  if (typeof Tesseract === "undefined") await loadScript(TESSERACT_URL);
+  _ocrWorker = await Promise.race([
+    Tesseract.createWorker(CONFIG.OCR_LANG, 1),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("The OCR engine cannot load in this hosted page. For scanned quotations or photos, use the downloadable copy of the Quotation Extractor (open the HTML file in your browser).")), 45000)),
+  ]);
+  await _ocrWorker.setParameters({ preserve_interword_spaces: "1" });
+  return _ocrWorker;
+}
+
+async function ocrCanvas(canvas, psm, scale) {
+  const w = await getOcrWorker();
+  await w.setParameters({ tessedit_pageseg_mode: String(psm) });
+  const { data } = await w.recognize(canvas, {}, { tsv: true, text: false, blocks: false, hocr: false });
+  // back to PDF points so OCR pages and text pages share one coordinate scale
+  return tsvToItems(data.tsv).map(i => ({ ...i, x: i.x / scale, top: i.top / scale, y: i.y / scale, w: i.w / scale, h: i.h / scale, fs: i.fs / scale }));
+}
+
+async function renderPdfPage(pdfPage, scale) {
+  const vp = pdfPage.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await pdfPage.render({ canvasContext: ctx, viewport: vp }).promise;
+  return canvas;
+}
+
+async function imageToCanvas(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.max(1, Math.min(3, 2400 / Math.max(bmp.width, bmp.height)));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bmp.width * scale); canvas.height = Math.round(bmp.height * scale);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  return { canvas, scale };
+}
+
+function resultScore(r) {
+  const verified = r.items.filter(it => it.rowCheck).length;
+  return (r.check.status === "ok" ? 1000 : 0) + verified * 10 + r.items.length;
+}
+
+// OCR with block mode first (psm 4), then sparse-text mode (psm 11) if the
+// result does not reconcile; keep whichever reads more verified rows.
+async function ocrAndAnalyze(name, canvases, basePages, progress) {
+  let best = null;
+  for (const psm of [4, 11]) {
+    const pages = [];
+    for (let i = 0; i < canvases.length; i++) {
+      const c = canvases[i];
+      if (!c) { pages.push(basePages[i]); continue; }
+      progress(`OCR ${name}: page ${i + 1}/${canvases.length}${psm === 11 ? " (second pass)" : ""}...`);
+      const items = await ocrCanvas(c.canvas, psm, c.scale);
+      pages.push({ page: i + 1, width: c.canvas.width / c.scale, height: c.canvas.height / c.scale, items, chars: items.length });
+    }
+    const r = analyzeDocument(pages, name, { ocr: true });
+    if (!best || resultScore(r) > resultScore(best)) best = r;
+    if (best.check.status === "ok" && best.items.every(it => it.rowCheck)) break;
+  }
+  return best;
+}
+
+async function extractFile(file, opts = {}) {
+  const progress = opts.progress || (() => {});
+  const isImage = /^image\//.test(file.type) || /\.(png|jpe?g|webp|bmp|gif)$/i.test(file.name);
+  if (isImage) {
+    const c = await imageToCanvas(file);
+    return ocrAndAnalyze(file.name, [c], [null], progress);
+  }
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const pages = await readPdfPages(pdf);
+  const textless = pages.map(p => p.chars < CONFIG.MIN_TEXT_CHARS);
+  if (!opts.forceOcr && !textless.some(Boolean)) return analyzeDocument(pages, file.name);
+  // scanned (or partly scanned) PDF: OCR only the pages that need it, unless forced
+  const canvases = [];
+  for (let i = 0; i < pages.length; i++) {
+    if (opts.forceOcr || textless[i]) {
+      progress(`Rendering ${file.name}: page ${i + 1}/${pages.length}...`);
+      canvases.push({ canvas: await renderPdfPage(pages[i].pdfPage, CONFIG.OCR_SCALE), scale: CONFIG.OCR_SCALE });
+    } else canvases.push(null);
+  }
+  return ocrAndAnalyze(file.name, canvases, pages, progress);
+}
+
+/* ============================================================
+   10. EXCEL EXPORT
+   Summary (one row per quotation) + All Items + one sheet per
+   supplier + Needs Review. Totals are per currency - amounts in
+   different currencies are never added together.
+   ============================================================ */
+const MONEY_FMT = "#,##0.00";
+
+function buildWorkbook(results) {
+  const wb = XLSX.utils.book_new();
+  const allItems = [];
+  results.forEach(r => (r.items || []).forEach(it => allItems.push(it)));
+
+  // ---- Summary ----
+  const sumHead = ["File", "Supplier", "Supplier (legal name)", "Quote No.", "Quote Date", "Valid Until", "Currency",
+    "Payment Terms", "Delivery Terms", "Incoterm", "Lead Time", "Lines", "Lines Total", "Freight", "VAT",
+    "Document Total", "Check", "Check Details", "Read By"];
+  const sumRows = [sumHead];
+  results.forEach(r => {
+    const m = r.meta || {}, f = r.facts || {}, c = r.check || {};
+    sumRows.push([r.filename, r.supplier || "", r.supplierLegal || "", m.quoteNo || "", m.date || "", m.validUntil || "",
+      m.currency || "", m.paymentTerms || "", m.deliveryTerms || "", m.incoterm || "", m.leadTime || "",
+      (r.items || []).length, c.linesTotal != null ? c.linesTotal : "", f.freight != null ? f.freight : "",
+      f.vat != null ? f.vat : "", f.docTotal != null ? f.docTotal : "",
+      c.status === "ok" ? "OK" : c.status === "mismatch" ? "REVIEW" : (r.items || []).length ? "Not verifiable" : "FAILED",
+      c.message || r.warning || "", r.engine || ""]);
+  });
+  const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
+  wsSum["!cols"] = sumHead.map(h => ({ wch: /File|Details|legal|Terms/.test(h) ? 34 : /Supplier/.test(h) ? 22 : 13 }));
+  moneyFormat(wsSum, sumHead, ["Lines Total", "Freight", "VAT", "Document Total"]);
+  wsSum["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sumRows.length - 1, c: sumHead.length - 1 } }) };
+  XLSX.utils.book_append_sheet(wb, wsSum, "Summary");
+
+  // ---- item sheets ----
+  if (allItems.length) XLSX.utils.book_append_sheet(wb, itemSheet(allItems), "All Items");
+  const bySource = {};
+  allItems.forEach(it => { (bySource[it.source || "Unknown"] ||= []).push(it); });
+  const used = new Set(["Summary", "All Items", "Needs Review"]);
+  Object.entries(bySource).forEach(([source, items]) => {
+    let name = source.replace(/[\[\]:*?\/\\]/g, "").slice(0, 31) || "Supplier";
+    for (let n = 2; used.has(name); n++) name = name.slice(0, 28) + " " + n;
+    used.add(name);
+    XLSX.utils.book_append_sheet(wb, itemSheet(items), name);
+  });
+
+  // ---- needs review ----
+  const review = [["File", "Issue"]];
+  results.forEach(r => {
+    if (r.warning) review.push([r.filename, r.warning]);
+    (r.items || []).forEach(it => { if (!it.rowCheck) review.push([r.filename, `Row ${it.pos || it.pn}: Qty x Price does not equal the line total - check this row.`]); });
+  });
+  if (review.length > 1) {
+    const ws = XLSX.utils.aoa_to_sheet(review);
+    ws["!cols"] = [{ wch: 40 }, { wch: 90 }];
+    XLSX.utils.book_append_sheet(wb, ws, "Needs Review");
+  }
+  return wb;
+}
+
+function itemSheet(items) {
+  const hasDist = items.some(it => it.distributorPn);
+  const hasSpecs = items.some(it => it.material || it.shape || it.threadSize || it.tubeSize);
+  const hasDisc = items.some(it => it.discountPct != null);
+  const head = ["No.", "Supplier", "Quote No.", "Pos"];
+  if (hasDist) head.push("Distributor PN");
+  head.push("PN", "Description", "Qty", "Unit", "Unit Price");
+  if (hasDisc) head.push("Disc %", "Net Unit Price");
+  head.push("Line Total", "Currency", "Delivery Date", "Lead Time", "HS Code", "Origin");
+  if (hasSpecs) head.push("Material", "Shape", "Thread Size", "Tube Size");
+  head.push("Row Check", "Notes");
+
+  const rows = [head];
+  items.forEach((it, i) => {
+    const total = it.lineTotal != null ? it.lineTotal : Math.round(it.quantity * it.unitPrice * 100) / 100;
+    const row = [i + 1, it.source, it.quoteNo, it.pos];
+    if (hasDist) row.push(it.distributorPn);
+    row.push(it.pn, it.description, it.quantity, it.unit, it.unitPrice);
+    if (hasDisc) row.push(it.discountPct != null ? it.discountPct : "", it.netUnitPrice != null ? it.netUnitPrice : it.unitPrice);
+    row.push(total, it.currency, it.deliveryDate, it.leadTime, it.hsCode, it.origin);
+    if (hasSpecs) row.push(it.material, it.shape, it.threadSize, it.tubeSize);
+    row.push(it.rowCheck ? "OK" : "CHECK", it.notes);
+    rows.push(row);
+  });
+  // totals per currency (never add EUR to USD)
+  const totCol = head.indexOf("Line Total");
+  const byCur = {};
+  items.forEach(it => {
+    const k = it.currency || "(no currency)";
+    byCur[k] = (byCur[k] || 0) + (it.lineTotal != null ? it.lineTotal : it.quantity * it.unitPrice);
+  });
+  rows.push([]);
+  Object.entries(byCur).forEach(([cur, v]) => {
+    const r = new Array(head.length).fill("");
+    r[totCol - 1] = `Total ${cur}`;
+    r[totCol] = Math.round(v * 100) / 100;
+    r[totCol + 1] = cur === "(no currency)" ? "" : cur;
+    rows.push(r);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = head.map(h => ({ wch: h === "Description" ? 46 : h === "Notes" ? 50 : h === "Material" ? 40 : /PN|Supplier/.test(h) ? 18 : h === "No." || h === "Pos" ? 7 : 12 }));
+  moneyFormat(ws, head, ["Unit Price", "Net Unit Price", "Line Total"]);
+  ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: items.length, c: head.length - 1 } }) };
+  return ws;
+}
+
+function moneyFormat(ws, head, names) {
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  names.forEach(n => {
+    const c = head.indexOf(n);
+    if (c < 0) return;
+    for (let r = 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell && cell.t === "n") cell.z = n === "Net Unit Price" ? "#,##0.00##" : MONEY_FMT;
+    }
+  });
+}
+
+
+/* ============================================================
+   11. UI WIRING
+   ============================================================ */
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js";
+
+const dropZone = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
+const fileListEl = document.getElementById("fileList");
+const extractBtn = document.getElementById("extractBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const statusEl = document.getElementById("status");
+const resultsCard = document.getElementById("resultsCard");
+const resultsEl = document.getElementById("results");
+const forceOcrEl = document.getElementById("forceOcr");
+
+let selectedFiles = [];
+let lastWorkbook = null;
+
+dropZone.addEventListener("click", () => fileInput.click());
+dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("hover"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("hover"));
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("hover");
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener("change", () => handleFiles(fileInput.files));
+
+function handleFiles(fileListLike) {
+  selectedFiles = Array.from(fileListLike).filter(f =>
+    f.type === "application/pdf" || /^image\//.test(f.type) || /\.(pdf|png|jpe?g|webp|bmp)$/i.test(f.name));
+  fileListEl.innerHTML = selectedFiles.map(f => `<div>${escapeHtml(f.name)}</div>`).join("");
+  extractBtn.disabled = selectedFiles.length === 0;
+  downloadBtn.style.display = "none";
+  resultsCard.style.display = "none";
+  document.getElementById("gridCard").style.display = "none";
+  statusEl.textContent = selectedFiles.length ? `${selectedFiles.length} file(s) ready.` : "";
+}
+
+extractBtn.addEventListener("click", async () => {
+  if (!selectedFiles.length) return;
+  extractBtn.disabled = true;
+  downloadBtn.style.display = "none";
+  resultsEl.innerHTML = "";
+  resultsCard.style.display = "block";
+  document.getElementById("gridCard").style.display = "none";
+
+  const results = [];
+  for (const file of selectedFiles) {
+    statusEl.textContent = `Reading ${file.name}...`;
+    try {
+      results.push(await extractFile(file, { forceOcr: forceOcrEl && forceOcrEl.checked, progress: (t) => { statusEl.textContent = t; } }));
+    } catch (err) {
+      results.push({ filename: file.name, supplier: null, items: [], meta: {}, facts: {}, check: { status: "none" },
+        warning: `Failed to read this file: ${err.message}` });
+    }
+    renderResults(results);
+  }
+  const ok = results.filter(r => r.check && r.check.status === "ok").length;
+  statusEl.textContent = `Done - ${results.length} file(s), ${ok} verified against their own totals.`;
+  extractBtn.disabled = false;
+  try { renderHandoff(results); } catch (err) { console.error("Spare Parts hand-off failed", err); }
+  lastWorkbook = buildWorkbook(results);
+  downloadBtn.style.display = "inline-flex";
+});
+
+const _downloadsCap = (window.claude && typeof window.claude.use === "function") ? window.claude.use("downloads") : null;
+downloadBtn.addEventListener("click", async () => {
+  if (!lastWorkbook) return;
+  const dl = _downloadsCap ? await _downloadsCap.catch(() => null) : null;
+  if (dl) {
+    try {
+      const buf = XLSX.write(lastWorkbook, { bookType: "xlsx", type: "array" });
+      await dl.save({ filename: "quotations_extracted.xlsx", data: new Blob([buf]) });
+    } catch (err) {
+      if (!err || err.code !== "declined") statusEl.textContent = "Excel download is not available in this view (" + ((err && (err.code || err.message)) || "unknown") + ").";
+    }
+    return;
+  }
+  XLSX.writeFile(lastWorkbook, "quotations_extracted.xlsx");
+});
+
+function renderResults(results) {
+  resultsEl.innerHTML = results.map(r => {
+    const c = r.check || { status: "none" };
+    const items = r.items || [];
+    const cur = (r.meta && r.meta.currency) || (items[0] && items[0].currency) || "";
+    const badge = c.status === "ok" ? `<span class="tag ok">&#10003; Totals match</span>`
+      : c.status === "mismatch" ? `<span class="tag warn">&#9888; Review</span>`
+      : items.length ? `<span class="tag">Not verifiable</span>` : `<span class="tag warn">No items</span>`;
+    const m = r.meta || {};
+    const metaBits = [
+      m.quoteNo && `Quote <b>${escapeHtml(m.quoteNo)}</b>`, m.date && `Date ${escapeHtml(m.date)}`,
+      m.validUntil && `Valid until ${escapeHtml(m.validUntil)}`, cur && `Currency <b>${escapeHtml(cur)}</b>`,
+      m.deliveryTerms && `Delivery ${escapeHtml(m.deliveryTerms)}`, m.paymentTerms && `Payment ${escapeHtml(m.paymentTerms)}`,
+      m.leadTime && `Lead time ${escapeHtml(m.leadTime)}`,
+    ].filter(Boolean).join(" &middot; ");
+    const hasDisc = items.some(it => it.discountPct != null);
+    const rows = items.slice(0, 25);
+    const more = items.length - rows.length;
+    const tableHtml = rows.length ? `
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Pos</th><th>PN</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th>${hasDisc ? `<th class="r">Disc</th>` : ""}<th class="r">Line total</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(it => `
+              <tr class="${it.rowCheck ? "" : "row-warn"}">
+                <td class="num">${escapeHtml(it.pos)}</td>
+                <td class="num">${escapeHtml(it.pn)}</td>
+                <td>${escapeHtml(it.description)}${it.notes ? `<div class="note">${escapeHtml(it.notes)}</div>` : ""}</td>
+                <td class="num r">${it.quantity}</td>
+                <td class="num">${escapeHtml(it.unit)}</td>
+                <td class="num r">${fmtNum(it.unitPrice)}</td>
+                ${hasDisc ? `<td class="num r">${it.discountPct != null ? it.discountPct + "%" : ""}</td>` : ""}
+                <td class="num r">${fmtNum(it.lineTotal != null ? it.lineTotal : it.quantity * it.unitPrice)}</td>
+                <td title="${it.rowCheck ? "Qty x Price = Total verified" : "Qty x Price does not match - check this row"}">${it.rowCheck ? `<span class="okmark">&#10003;</span>` : `<span class="warnmark">?</span>`}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+      ${more > 0 ? `<div class="more-note">+ ${more} more rows in the downloaded Excel</div>` : ""}
+      <div class="totals">Lines total <b>${fmtNum(c.linesTotal)} ${escapeHtml(cur)}</b>
+        ${r.facts && r.facts.freight != null ? ` &middot; Freight ${fmtNum(r.facts.freight)}` : ""}
+        ${r.facts && r.facts.vat != null ? ` &middot; VAT ${fmtNum(r.facts.vat)}` : ""}
+        ${r.facts && r.facts.docTotal != null ? ` &middot; Document total ${fmtNum(r.facts.docTotal)}` : ""}</div>
+    ` : `<div class="empty-hint">No line items extracted.</div>`;
+
+    return `
+      <div class="file-block">
+        <div class="file-head">
+          <span class="file-name">${escapeHtml(r.filename)}</span>
+          <span class="tags"><span class="tag">${escapeHtml(r.supplier || "Unknown")} - ${items.length} items</span>${badge}</span>
+        </div>
+        ${metaBits ? `<div class="meta">${metaBits}</div>` : ""}
+        ${c.message && c.status !== "none" ? `<div class="${c.status === "ok" ? "ok-note" : "warn-note"}">${escapeHtml(c.message)}</div>` : ""}
+        ${r.warning && r.warning !== c.message ? `<div class="warn-note">${escapeHtml(r.warning)}</div>` : ""}
+        ${tableHtml}
+        <div class="engine">Read by: ${escapeHtml(r.engine || "-")}</div>
+        <details style="margin-top:8px;">
+          <summary style="cursor:pointer; color:var(--muted); font-size:12px;">Show raw extracted text (for troubleshooting)</summary>
+          <pre class="raw">${escapeHtml(r.rawText || "")}</pre>
+        </details>
+      </div>`;
+  }).join("");
+}
+
+function escapeHtml(v) {
+  return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+const GRID_VENDORS = ["11", "A water System SRL", "ABC1 المصنع الجديد بالصناعية", "abdul mohsin abdulaziz aljabr est", "ABDULLA BIN HAMID TRADING LLC", "AbdulLatif Jemeel Motors", "AbdulRahman Ali AbdAllah AlGhanmi Trading", "Abker Osman Shouki Contracting Est.", "AbuDawood Trading Co.", "ACT DYNACOمؤسسةالتحكم التكنولوجي للمقاولات", "ACTIVE TRADING EST", "Adnan A.H. Nahhas Trading Est.", "Advanced Artificial Intelligence for Operations and Maintenance Co.", "ADVANCED CONTROL TECHNOLOGY", "Aerzen ME - FZE", "Aetna Group S.P.A", "AEW Technik FZCO", "AF Compressors Middle East FZE", "AFI UPLIFT فرع شركة ايه اف آي ابليفت لميتد", "Agrumaria Reggina", "Ahmad Hammad-  Amalco", "AIB INTERNATIONAL UK LTD", "AKSAF Trading Est.", "Al Ahramat EST", "AL Ameen Lathe WorkShop LLC", "Al Amoudi Beverage Co", "Al Amoudi Beverage Industries", "Al Ansam Al Mumayaza Co. Ltd", "AL BARRAK SHIPPING AGENCIES CO LTD.شركة البراك للملاحة", "AL Hanaa Advanced Trading Company", "Al Hanaky Trading Establishment", "AL HOTY-STANGER LTD.CO.الحوطي ستانجر", "Al Husaiki Trading Est.", "Al Kasibat Al Mushriga Trading Co.", "AL Medan Project Company For Corrugated Cartons", "Al Quraishi Electrical Services-AQESA", "AL RAYA SPECIALTIES", "AL Safi Danone Co. Ltd", "Al Sahab Al Safi For Safety", "Al Salem York Services Co. Ltd.", "Al Saqour Factory For Condensers", "AL Thamaniah Commercial Services", "AL Watania Paper Products", "Al Yousef Est. For Maintenance", "AL Zahrani Machinery", "AL-Wabel Trading & Maintenance Co.", "AlBisher Contracting EST", "AlHamrani-Fuchs Petroleum SA Ltd.", "Alkhorayef lubricants company ltd.", "Alpla Plastic ME Saudi Industrial Co.", "AlRabeh Pack", "AlRowad Construction & Contracting Est", "Altaqah Trading Establishment", "APECX Swiss AG", "Apollo Safety", "Aptar Torello", "ARABIAN Business Machines coالشركة العربية لتجهيزات المكاتب", "Arabian Gulf Manufacturers Ltd. (GulfMaid)", "Arabian Packaging Co. L.L.C", "ARSTE", "ARTAT Enterprise", "Arwadh Trading Establishment", "Asco Carbon Dioxide Ltd.", "ASEM For Electro-Mechanical Services", "Asure Quality Motabaqah LLC (AQM)", "Atlantic Analytical Laboratory", "Atlas Industrial Equipment Company-Atlasco", "ATTEH CO.FOR TRADE&INDUSTRY عطية", "Australian Lab services Arabia Co. Ltd.", "AVIENT)ColorMatrix Europe Ltd", "AWR automation Gmbh", "Azelis", "Badger Meter Middle East", "Baianat Intellectual Property Co,", "Ball United Arab Can Manufacturing Co.", "Baltimore Aircoil Company", "Barnsley Universal Inc.", "Barry Callebaut", "Barwa Advanced Trading B.A.T", "Bashaer Ogab Al Sufyani Est.", "Baumer S.R.L", "Best Electricity Corp. Tecnical Energy", "Best Support Trading Est.", "BinGhatti Beverages Manufacturing LLC", "Black Ivory General Contracting", "BLUCHER METAL A / S", "Blue Chip Croub-U.S.A", "BMB Spa", "Bmotiontech", "Borouge Pte Ltd", "Brenntag Saudi Arabia", "Bright Pearl Factory For Plastic Industries", "BW INTERGRATED SYSTEMS UK LTD", "Can Pack Middle East LLC", "CanPack Food & Industrial Packaging", "CanPack Food & Industrial Packaging sp. zo.  o.", "CARGOPORT INTERNATIONAL", "Chemicals International Est.", "Clariant شركة كلاريانت السعودية للملونات المحدودة(AVINENT)", "Climate System Contracting", "COGES S.P.Aملحقات البيع الذاتي", "compden BRI", "COMPUTER SUPPORT HOUSE", "Constantia Flexibles", "COPERNICUS ADVERTISING L.L.C", "CORVAGLIA MOULD AG", "Cotton Uniforms", "CRAEMER", "Crown Jeddah Beverage Cans Factory", "Crown MiddleEast Can Co. Ltd.", "Cummins Arabia-كمنز العربية السعودية المحدودة", "Daly Middle East", "Dar Alaalmiyah Trading Company Ltd.", "DeleteVia", "DHL Global   forwarding دي اتش ال العالمية للشحن", "Diamond Spectrum.", "Diouf Al Sharq General Contracting Co.", "DIVERSEY SAUDI ARABIA-Sealed Air", "DMG Events LLC LTD", "DOHLER MIDDLE EAST", "Dubi Chem Marine International Est.", "Durrah Advanced Development Company", "Eastern Resources Trading Est الشرقية للمورارد", "EasternPak Corrugated Packaging", "Easy Open lidIndustry Corp yiwu", "Echo Tools Trading est.", "Ecocap's SRL", "Edmaj Exhibition Company", "Eisa R.Alhartany Env. Consulting", "eisbar", "Electryc Way Arabia Trading", "Elite AlFay Est. Contracting", "Elite United Trading Est.", "Enjaz AL Nakhba General Contracting", "Enpack Metal Technology Co. Ltd", "Enterprise Tondelli", "Esnad Co. Ltd.", "Europool s.r.I", "Evapco Europe", "Everest Industrial Group", "Faridah Idris Filemban Co", "FAS INTERNATIONAL S.P.A", "FAVA BIBITE SRL", "Faye Trading Est", "Ferrum Packaging Ltd", "FILMARET STUDIO LTD افلام الطباعة", "Firmenich SA", "First Shine Trading مؤسسة التألق الاولة التجارية", "Flexible Packaging Co, Ltd (Flex Pack)", "Foaz Industrial Equips Co", "Food Safety est.", "Food Specialities Limited", "FOOD SPECIALITIES LIMITED-FSl-ستريا جوس", "FORBES MARSHALL Prvate Limited", "Fresh Refrigiration &Air Conditioning Est", "FrigoSyatem S.R.L A Socio Unico", "Frimec", "FSL SAUDI ARABI LTD CO.", "GCC Standardization Organizationهيئة التقسيس", "gea mechanical معلق", "GEA MIDDLE EAST", "GENERAL Contracting Company-العليان", "General Trading and Equipment", "Givaudan MEA FZE", "GLOPELINK WEST STAR S شركة جلوبلينك وست ستار شيبينغ", "Goetze KG Armaturem", "GRADE Refrigeration LLC", "GREATVIEW ASTPTIC Packing", "Gulf Air Filters Factory Company", "Gulf Application Engineering & Packaging FZE", "GULF APPLICATION ENGINEERING AND PACKAGING FZE", "Gulf Packaging Systems Company ( 3P)", "HAA2", "Hadaf Technical General Contracting Est.", "Hamad Abdullah Alhuwais Company Ltd حمد الحويس", "Hanovia Ltd.", "Hansa Industrieanlagen GmbH", "Hansa Industrieanlagenمغلق", "Hassan Balbid Trading Est.مؤسسة الجسور الغربية", "HEBA Saudi Safety Equipment", "HELUKABEL MIDDLE EAST DWC LLC", "HEUFT SystemTechnik GMBH", "IBDA Arabia Trading Company", "Ibrahim Hassan Ali A. Est. For IT", "ICE WATER MANAGEMENT", "IDAC MERIEUX", "Ideal Floors Est", "IFFAH TRADING L.L.Cايفا للتجارة", "IGR institut für Glas-und Rohstofftechnologie", "Imdadat Contracting & Maintenance", "IMETA S.r.l", "INDAG GMBH CO", "INDUSRIE FRACCHIOLLA S A P", "Industrial Engineering Progress Factory", "Innoveda International G Trading LLC", "Integrated Modern Scientific Supplies Co.", "Integrated Packaging Industries Company", "Integrated Plastics Systems", "Integrated Techno Trading Est.", "Intelligent Packaging Services Global FZCO", "International Aseptic Paperboard Manufacturing . L.L.C.", "International Flavors & Fragrances Ltd,", "International Taste Institute", "International Timber Co. LTD شركة الأخشاب العالمية المحدودة", "InterSource Ingredients Co. Ltd.", "Intertek Arabia Administrative Company", "IRPLAST S.p.A", "ITECFOOD TECHNOLOGY", "Jadli شركة جادلي الهنديه / مانجو", "JAMES WALKER", "JEDDAH LINKS INSTITUTE", "Jungbunzlauer Austria AGجنجبونزلاير", "Kaf Mim Baa Yaa Waw Taa Kaf Company", "Kasel GmbH", "Kebar AlKhaleej Establishment", "Kerry Ingredients & Flavors Ltd", "Khalid AlZahrani Est. For Uniforms", "KHS GmbH", "KHS Middle East FZCO", "KIESELMANN", "Krones MEA FZCO", "Lab Technologies", "Label Arts Factory", "Label Tech Factory For Packaging Products Co. Ltd.", "Lami Packaging Co. Ltd", "Lasenor", "LINK19BEVERAGE TRDING", "LK Poland", "LK POLAND", "LK POLAND KUSTRA S.K.", "LMK Thermo Safe Ltd", "LNN HANDLING TECHNOLOGIES", "Logexa logistics solution", "Luxe Details Uniforms", "Luxury Carts", "M. Moubarak M. AL Abdi Est", "M.Raqiya Est.", "Madar For Medical & Scientific Supply", "MAHAFL FOR ADVERTISING محفل للدعاية والاعلان", "Mahat Energy", "Marmon Foodservice Technologies", "MasterPress", "MAWRED ALSHAMELAH - موارد الشاملة", "Medical Business Center Co.", "MedicCom Distribution Fze", "MESSE JOB", "Millenium Chemical Trading LLC", "MMS PLACEMENT INTالفلبيين", "Modern Petrochemicals Company Ltd (MPC)", "Morex Inc", "Motabaqah Foods Co. Ltd", "Mundolatas Web S.L", "MWARED ALSHAMELAH TRADING CO", "Naizak Global Engineering System مؤسسة انظمة النيزك الهندسية العالمية", "Najawi Trading Est.", "Najawi Trading Establishment", "Nakakin Pumpentechnik GmbH", "NALECZOW ZDROJ SP. Z O.O.", "Napco Trading & Distribution Co.", "Napco United Plastics", "National Adhesives Ltd.", "National Factory For Glass Bottles", "National Factory For Making Cans-ARA Branch", "National Marketing Company Ltd.", "Naturex Ingreidents Naturais Ltda", "Nestle", "Netstal MEA", "New Box SPA", "NEW TECHNOLOGIES EST نيوتكـ", "NEXOLOGI CREATIVE LABS REKLAMCILIK LİMİTED ŞİRKETİ", "NRTC Company Limited /شركة ان ار تي سي المحدودة", "Obeikan Film & Flexible", "OCME", "OCTAL SAOC FZC", "OGNAR GIDA ITH.IHR.SAN.TIC.A.S", "Omar K. Alesayi & Co Ltd", "ORGINAL PLACE TRADING ESTABLISHMENT", "payvend", "PETEK Proces d.o.o", "Piovan S.p.a", "Pomona Kellerei GmbH(تعبئة المانيا", "Pouch Partners GmbH", "Power Rack", "PowerLine Solutions Trading Co.", "Pragati Glass Gulf LLC", "Professional & Technical Contracting Est.", "Professional Polishing Co. For Iron Industries", "PROMEC مؤسسة المحترفة الاولي", "ProMinent Juffali FZC", "Qassim Corrugated Box Factory Co.", "RAHIL ARABIAN LED CO", "Raja International Industrial", "RAKME", "RAPID SAUDI ARABIA CO.LTD", "Rawabi Integrated Gas Co.", "RedaChem United For Trading", "Reef Caps Tecnocap Industry Company LLC", "Reliable Industrial Equipment Company LLC", "RICI Co. Ltd.", "Roshana Plastic & Packaging Industries", "ROYA ALMASIYA TRADING", "SACMI Verona S.p.A", "Safa Taiba Glass Factory Co", "SafaAgro", "Safana Ideal Trading Est.", "Saleh AlThinayyan Est For Maint. & Cleaning", "Saleh Hammad Al Malki Trading", "Salzer Control Systems GmbH.", "Samara Security & Safety Systems", "santander", "Saudi Anfal Factory For Automatic Doors", "Saudi Basic Industries Corporation(Sabic)", "Saudi Concrete Technique Co. Ltd.", "Saudi Crawford  Doors Factory Ltd", "SAUDI FAN INDUSTRIES المصنع السعودي للمرواح", "Saudi Modern Packaging Factory Co. (PrintoPack)", "Schneider Electric", "Schwaderer GmbH", "Sedres Chemicals Solutions Co,", "Seham Yousaf Munshi Est,", "SEPCO Environment", "Services Technologies Establishment", "Sesotec GmbH", "SETRA الشركة السعودية الاكترونية للتجارة والمقاولات", "Shahin Engineering Consultants", "Shamrookh Modern Lathes", "Shanghai ColorJet Industry Co. Ltd.", "Shanghai Food Group Limited", "Ship Care Trading & Contracting", "SHIP CAREعناية السفن", "Sick", "SIG COMBIBCO", "SIL.GA.", "SILVERSON MACHINES LIMITED", "SIMCO Saudi Industrial Mashinery CO", "SIPA Middle East", "Skot India", "SMI Electric Motor Rewinding", "Southern Can Making Co. Ltd.", "SPECK Vakuumtechnik GmbH", "star of service sole propritership for rental", "Steinfurth", "STERN VITAMIN سترين فيتامين", "STRAUTMANN", "Subway Networks Trading & Services", "SURDRY, S.L.", "SWEETHOUSE CO . KG", "T.M.E Vertriebsgesellschaft  mbH", "Talal Al Omairi Est For Equipment Maintenance", "Talal Khalid Muhammad Ahmed Trading Est.", "TANRIVER MUMESSILIK MAKINE SAN.LTD.STI", "Tasa Foods Pvt. Ltd.", "Tate & Lyle", "Tebyan Law Firm - شركة تبيان", "Technical Solutions Limited TSL", "Technical Supplies & Services Co. L.L.C", "Technical Supplies &Services Al Saudia Co.", "Technical Zone Est.", "TechnoBuild", "TECHNOLIGHTشركة توازن لتقتنية الانارة  والمقاولات المحددوة", "Tecno spares  Trading WLL", "TecPak Food Packaging Solutions", "TeknoLogix Industrial Automation Specialities", "Tetra Pak Export FZE", "Tetra Pak Manufacturing Ltd.", "TetraPak - Technical Service", "Thermosoft Technologies", "TIFA WORLDWIDE LTDشركة تيفا", "Tira Gulf Trading", "TMN INTERNTIONAL", "Top Cool Center", "Trans-Tech Weisser GmbH", "TWATCO", "Unilogo Robotics", "UNION ENGINEERING", "United Industrial Chemicals", "United Park Co.", "UNITED SUGAR - DUBAI(Quick Deal(", "United Sugar Company", "Utilities Solutions Trading Co.", "VAMS VALVES TRADING L LC", "Vendor one time", "VENKTRON DMCC", "Veolia Water Solutions", "Veolia Water Technologies, Saudi Limited", "VERO NEXIA LLC", "Vibro Floor POLSKA SP.ZO.O.", "Vreugdenhil Dairy Foods", "WARED وارد للتخزين والتوزيع المحدودة", "White Gold Dairy Products FZE", "Wild Flavors Middle East", "Windsor Foodstuff Factory LLC,", "Woosim SYSTEMS INC", "WorldRep Chemical Trading Co.", "Wurth Saudi Arabia LLC", "Xiamen Baofeng Trading Co. Ltd.", "xyz", "YASH CONTRACTING EST", "Zamil Air Conditioning & Ref. Services", "Zamil Trade & Services", "Zhuhai Bright Packaging Technology Co.,LTD", "أبانا ABANA", "أسامة السليم وغسان العواجي وشركاؤهم للمحاماة", "أمانك لخدمات الشحن", "احمد  محمد  محسن العيسائي", "البئية الخضراء للاستشارات البئية", "البسام وشركاه المحاسبون المتحالفون", "التحصيلات", "التعاون الكميائية-مؤسسات سقالة", "التقنية الصحيحة للمقاولات (Correctech)", "الجريسي للتقنية مؤسسة بيت الرياض", "الخدمات السريعة QUICK SERVICES", "الخريف التجارية -ALKHORAYEFcommercial", "الخليج للتطبيق المهندسي والتغليف", "الدامغ للحلول الصناعية ADDAMEGH INDUSTRIAL SOLUTION", "الركاز للاستشارات الضريبية", "الزامل للحديد", "الشركة الخليجية العامة للتأمين التعاوني", "الشركة الخليجية لانظمة التعبئة والتغليف 3P", "الشركة السعودية البحرية", "الشركة السعودية الخليجية لحماية البيئة-سيبكوSEPCO", "الشركة السعودية العربية للزجاج", "الشركة السعودية لتصنيع المباني الحديدية", "الشركة السعودية للكهرباء", "الشركة العربية لتجارة المواد البترولية/موبيل", "الشركة العربية لتجهيزات المكاتب(العليان)", "الشركة العربية لتكييف الهواء المحدودة", "الشركة المتحدة الدولية للمواصلات (بدجت", "الشركة الوطنية للصناعات الورقية", "الشركة الوطنية للمياه", "الشيخ /محمد سعد دهيران الشلوي", "الصقر الذهبي للتجارة العامة Golden Falcon", "العالمية الخليجية المحدودةINTERGULF EMPOL LTD", "العطاء للسلامة والمعدات مؤسسة عيادة بنت سعيد بن عساس المنهالي(AL-ATTA FOR SAFETY)", "القدرة العالمية للصناعة", "المؤسسة الثلاثية المتحدة The Triennium Est", "المتحدة للسيارات", "المتحدة للكرتونUnited Carton Industries Company", "المشارف العالمية للتجارة", "المصنع المتحد للكيماويات المتخصصة-unichem waste To Wealth", "المصنع الوطني للمواد الغذائية", "الهئية السعودية للمدن الصناعية ومناطق التقنية", "الوطنية للتأمين", "الياء المتطورة الاجهزة والمعدات الطبية والمخبرية", "اليوسف لانظمة التبريد", "انس بن حمدان للاستشارات الضريبية", "بايرميدس  للمعدات الكهروميكانيكية -Pyramids Electromechanical Equipments LL", "بصمة خبرة لادوات الامن والسلامةExperience Mark for Safety", "بن غاطي سلفة السكر", "بوبا العربية للتأمين- العيسائي للتوزيع", "بيت التبريد", "بيت الخبرة(مكتب الجيلاني للاستشارات البيئية)", "تربل ايه لوجيستكس ش.م.م TRIPLE A LOGISTICS L.L.C", "تقنية القدرة لانظمة التحكم", "تكنولوجيات الصحراء desert technolgies", "جاه للملكية الفكرية", "جلف سيفتي اكيوبس تريدنجGULF SAFETY EQUIPS TRADING LLC", "جوال للسفر", "جولدان بيز Golden Bees General Contracting Co", "حديد السعودية(شركة حديد التسليح السعودية المحدودة)", "خلود صالح عبدالله العمودي", "دار جواهر التراث للنشر والتوزيع", "دهانات الشرق الاوسط", "رضا النظافة احدي فروع شركة رضاللاستثمار المحدودة", "ركن بلنسية للخدمات التجارية-Valnsia Est", "رواد الجنوبية لتقنية المكاتب", "سعد سعود القحطاني", "سهم الفيصلية التجارية SAHM ALFAISLAH", "سيتكو للشحن SITCO", "سيكا العربية السعودية", "شركة  الساهر الأمني للحراسات الأمنية", "شركة  ماسكو للاستلستين", "شركة DHL لخدمات المراسلات", "شركة E-PACKلمواد التغليف", "شركة GEA جريد- معلق", "شركة أبناء عيد العنزي للنقليات", "شركة أركان للتنمية  Arkan Sci", "شركة أروقة النظام للمحاماة والاستشارات القانونية", "شركة أصباغ البناء التجارية", "شركة إبدا العربية التجارية", "شركة إيلاف الدولية للتجارة ELAF", "شركة ابراهيم الجفالي واخوانه للمعدات Ibrahim Juffali Brothers Technical Equ", "شركة ابراهيم علاوري وأولاده", "شركة ابناء حمود ابراهيم الذياب", "شركة ابناء سليمان حمد السيف للنقل البري", "شركة ابناء عبدالعزيز ابراهيم القاضي للتطوير والاستثمار", "شركة ابناء علي عبد الله العيسائي-الكفرات", "شركة اتحاد الخليج للاغذية .", "شركة اتيليريس فرنكوايس - بلحيكا", "شركة ادارة وانماء المشاريع العقارية المحدودة", "شركة ار اس ام المحاسبون المتحودون للإستشارات المهنية", "شركة اركوما", "شركة اعمالنا المتحدة للمقاولات -تأمين مستودع ينبع", "شركة افاق النماء-", "شركة افلاك للصناعات الالكترونية", "شركة افلاك للصناعات الالكترونية المحدودة", "شركة افلاك مغلق", "شركة الإنسام المميزة المحدودة لتجارة الجملة والتجزئة", "شركة الاجير المثالي للصيانة والنظافة", "شركة الاشمل التجارية", "شركة الاعمال الكهربائية والصيانة", "شركة الاقتصاد القابضة - مكاين الطباعة", "شركة البداهة للصناعات الحديثة المحدودة Al Badha", "شركة البرق المتميزة للوقود", "شركة البريق السعودية للتجارة ALBARIQ SAUDIA TRADING CO", "شركة البلاد الرقية للتجارة", "شركة البواردي للعدد والأدوات", "شركة البيت العربي للتجارة Arabian Trade House", "شركة التحليل الواحد الطبية", "شركة التعاونية للتأمين", "شركة التفاصيل العربية الحديثة للخيام", "شركة التقنية الثلاثية tetra tech.co", "شركة التكامل  للملاحة المحدودة", "شركة التوريدات الميكانيكية والكيماويات", "شركة التوكيلات التجارية للشرق الأوسطCMA CGM", "شركة الجوده المتكامله للتجاره التجاريه", "شركة الحاج عبدالله علي رضاcosco", "شركة الحديد والبناء التجارية", "شركة الحسن غازي ابراهيم شاكر", "شركة الحقبة الاكترونية للتسويق الاكتروني", "شركة الخليج العلميه", "شركة الخوارزمي للخدمات الاكتوارية", "شركة الرومانسية المحدودة", "شركة السعدي جروننفلدر المتحدةCGS", "شركة السنيدي للمقاولات والصناعة والتجارة", "شركة السواعد السريعة للتشغيل والصيانة", "شركة الشرق الأوسط للصناعات البلاستيكيهMiddle East Plastic Industry Repall", "شركة الشرق للانشاءات -ويفرز", "شركة الشرق للتجارة والاملاحة", "شركة الصواير التجاريه المحدوده", "شركة العزاز المحدودة-Alazzaz co.ltd", "شركة العمودي لصناعة السدادات", "شركة العيار النموذجي", "شركة العيسائي القابضة", "شركة العيسائي للتسويق", "شركة العين اليقظة للحراسات الامنية", "شركة الفنار المحدودةAl-Fanar", "شركة الكالي العربية  صودا", "شركة الكترون التجارية", "شركة الكتريكوي العربية للتجارة", "شركة المؤيد للسياحة والسفر", "شركة الماس الفضية للتجارة", "شركة المتحدة للتبريد والتكييف -جدة", "شركة المتحدة للكرتون-المراعي", "شركة المجدوعي للوجستيات المحدودة", "شركة المجموعة الثلاثية للتجارة والصناعة TRIPLE 3", "شركة المخازن المتحدة المحدودة", "شركة المراعي لصناعة المشروبات الغازية  شركة الشخص الواحد", "شركة المرجان الازرق للمقاولات Bluereef", "شركة المشروبات الفاخرة التجارية", "شركة المصنع السعودي لصناعة الصوف الصخري", "شركة المصنع السعودي للالوان والمحسنات  فرع شركة محمد عبدالرحمن الصالب بن عفيف التجارية", "شركة المصنع الوطنى لا غطية العلب ( نافسل )", "شركة المعدات النفطية التجارية بتروماكس", "شركة المميز بارك للتشغيل والصيانة", "شركة المنامة للخدمات المحدودة", "شركة المنظومة للصيانة والنظافة organiztion", "شركة النخيش العقارية", "شركة النهل للحاسب الآلي", "شركة الورق الصحي المحدودة(FINE)", "شركة الوسام القويةللمقاولات", "شركة اليات السلطان للمعدات", "شركة اليمامة  للسفر والسياحة", "شركة اليمامة لخدمات النقل", "شركة املاس للمقاولات", "شركة انجاز ات المتطورة لتقنية المعلومات", "شركة انسيا", "شركة انظمة الحاسب الالي العربي", "شركة اونيكس", "شركة ايفرست للصناعة  -  الشارقة", "شركة ايلاف العربية للمقاولات", "شركة باخشب للنقليات", "شركة باري ويملر", "شركة باسلامة المتطورة المحدودة", "شركة بافكو الدولية لخدمات الشحن والنقل المحدودة", "شركة بالتيمور اير كويل", "شركة بايوني للتجارة Bayouniya", "شركة برمجة انظمة الاتصالات - فراس", "شركة بن زقر كورو المحدودة", "شركة بوبا العربية للتامين-المرطبات", "شركة بوبا العربية- الاطارات", "شركة بويكر للصحة العامة السعودية", "شركة بيت الشواية", "شركة بيس العالمية التجارية", "شركة بيكر تيلي م ك م وشركاه bakertilly", "شركة تترا باك - التوانك الجديدة", "شركة تراب لمكافحة الحشرات", "شركة ترانتر العالميه", "شركة تقنية الانتاج للتجارة-ABC1", "شركة تقنية المياه والبيئة المحدودة(ويتكو)", "شركة تكنو ميدلست /اشارقه", "شركة تماسك الجودة للنقليات", "شركة تمكين للصناعة والتجارة المحدوة-TAMKEEN", "شركة توزيع أكوابورtawzea aquapor", "شركة توكيلات عبدالله جار الله الغامدي للتجارة", "شركة ثبات للطيران", "شركة جلوبلينك ويست ستار شيبيغ المملكة العربية السعودية", "شركة حافظ محمد دين وشريكه للمقاولاتHMDC CONTRACTING", "شركة حبابي ناصر الزمامي للتجارة", "شركة حسان المحاسني للاستشارات القانونية", "شركة حسين منصور منصور وشريكه للمقاولات", "شركة حلول الحركة لخدمات الاعمال", "شركة حلول خط الطاقة للتجارة", "شركة دانة الاجيال للتجارة شركة شخص واحدDanatAl Ajiyal", "شركة دايكن لتكييف الهواء العربية السعودية", "شركة دهلر / فرع دبي", "شركة راحل العربية المحدودة", "شركة راكس لخدمات اصدار شهادات الجودة", "شركة رسم المبدعون للدعاية والإعلان", "شركة ركن المسبار التجارية", "شركة رولاند / ايطاليا", "شركة روهـــا", "شركة ريدان الغذائية (مطابخ ومطاعم ريدان", "شركة سباركاس مارك جرافليرلاند", "شركة سرمد الاولي المحدودة", "شركة سلطان عطيه المالكي وشركائه للتجارة", "شركة سما ماسا التجارية", "شركة سمير للتجارة والتسويق", "شركة سمينس المحدودة SIEMENS", "شركة سناس للبريد (DHL)نقدي", "شركة سنام المتطورة للمنتجات الانشائية", "شركة سنترال للقوارير العالميه", "شركة سي بي ل ( دانييل سابقا )", "شركة سيفا السعودية للخدمات اللوجيستية للشحن/ CEVA Saudi Logistics", "شركة سيفى العالمية SAIFI international co", "شركة سيمر ايز - هارمن وريمر ديكا المانيا", "شركة سيمنس المحدودة SIEMENS", "شركة شحن ONE ocen net work exporter", "شركة شمساء التجاريه", "شركة شيفر وفلوتمان - المانيا", "شركة صالح وعبدالعزيز اباحسين", "شركة ضمان الجودة للتحقق والمطابقة TUV AUSTRIA", "شركة طاقة الشرق الأوسطMIDDLE EAST ENERGY CO.", "شركة طريق المعادن للاعمال الحديدية/Metal Way For Steel Fabrication", "شركة ظافر-CHEMICAL AROMAS EUROPE-gib", "شركة عبد العزيز محمد الشايع ALSHAYA", "شركة عبد اللطيف حسين ابو الجدائل واولادهAbdul latif Abuljadayel", "شركة عبداللطيف جميل للمعدات الصناعية المحدودة", "شركة عبدالله ابو نيان التجاريةA.ABUNAYYAN", "شركة عبدالله بن محمد باجبير واولاده", "شركة عبدالله هاشم المحدودة - ABDULLAH HASHIM COMPANY LTD - MACHINERY DIVISIO", "شركة عصام قباني وشركاه للإنشاءات والصيانة", "شركة عكل للصناعة والتجارةAkel Trading & Industrial Co.", "شركة عماد زين الدين الحربي للاستشارات المهنية -محاسبون قانونيون", "شركة عمر قاسم العيسائي وشركاه المحدودة-قسم المعدات الثقيلة", "شركة عهد الجزيرة Ahed Aljazeera Co.Ltd", "شركة غزلة للتجارة", "شركة فرجينيا دير  -  أمريكا", "شركة فرقود للدعاية والاعلان", "شركة فريدة ادريس فلمبان  التجارية", "شركة فوز للكيماويات Fouz Chemical Co.", "شركة في أن يو لخدمات ابحاث السوق المحدودة", "شركة فيوليا وتر - المصنع الجديد", "شركة قادة الفعالية للخدمات التجارية", "شركة قمة العراب التجارية", "شركة قمة العراب التجاريه", "شركة قوافل الجزيرة لوسطاء الشحن", "شركة قوة الرافعةللخدمات الصناعيةPOWERLIFT", "شركة كرونس المانيا  KRONES AG", "شركة كفاءة التميز  التجارية", "شركة كي اتش اس خط رقم 4", "شركة كي اتش اس كوربوبلاست", "شركة كيان لزيوت التشحيم المركز الرئيسي", "شركة لاك اليابانيه", "شركة لامسي المحدودة LAMSEE COMPANY LTD", "شركة لقطع المتحدة للتجارة UNITED LAQTA", "شركة مؤسسة العيسائي للتجارة", "شركة مجداف للتجارة Mejdaf", "شركة مجموعة اعمال البسامي الدولية", "شركة مجموعة الناصر للمقاولات", "شركة مجموعة عبدالمحسن الحكير (فندق رديسون بلو)", "شركة مجموعة محمد علي العيسائي", "شركة محطة بوابة البحر الاحمر  المحدودة", "شركة محمد عبد الرحمن فرحات للصناعة", "شركة محمد عبدالرحمن فرحات للمقاولات -ضمان حسن التنفيذ", "شركة محمد علي العيسائي لانظمة التخزين (RP)", "شركة محمد علي العيسائي للمواد الغذائيه المحدودة", "شركة مختبرات حصانة التخصصية", "شركة مريم أحمد جمال وشريكتها للتجارة", "شركة مصدر لمواد البناء", "شركة مصنع المقاول العربي لانتاج انظمة الامن  والسلامة", "شركة مصنع بداية الخليج للصناعات البترولية", "شركة مصنع بلاستيك الرياض RYADH PLASTIC FACTORY Co", "شركة مصنع عالم الناصرية المحدودة", "شركة مطاعم ومطابخ مدفون السدة", "شركة مهيل لإدارة المرافق قسم الصيانة والشغيلMUHEEL", "شركة موارد الحجاز الطبية", "شركة موانىء دبي العالمية", "شركة موسوعة الخليج للمقاولات والتكييف", "شركة نالكو السعودية المحدودة Nalco Saudi", "شركة نخبة الاخوة الدولية للتجارةElite Brothers International Co. Brosco", "شركة نزار علي بخرجي للمقاولات العامة", "شركة نماذج العالمية للدعاية والاعلان", "شركة نيو بوكس", "شركة هاتكون المحدودة HATCON", "شركة هامبا-المانيا", "شركة هداية السعودية المحدودة", "شركة هيلثي اند تيستس الغذائية - تعبأة", "شركة وكالة مرح الدولية", "شركة وورث السعودية العربية Wurth", "شركة ويتمان هاسيلبيرج /أمريكا", "شركة يوسف بن احمد كانو المحدودة", "شركةاليات السلطان للمعدات", "شركه المسانده الاسكانيه", "شقق الزاهية للشقق المفروشة", "صلاح الدين عمر محمد للطبالي الخشب", "عصر الكمبيوتر/ PCTIME", "عهدة ابراهيم حسن علان ايوب", "عهدة الموظف - محمد عبدالله عوض", "عهدة تصديقات غرفة تجارية", "عهدة توماس", "عهدة جاجات- تخليص جمركي", "عهدة جميل حسن عبد الله بحاش", "عهدة حسن أحمد حسن أيوب", "عهدة حمزة علقم", "عهدة سباباتي باسكاران", "عهدة صابر السيد", "عهدة ضيف الله عواض الربيعي", "عهدة طلال عاطف", "عهدة طه سالم", "عهدة عابد هليل الحربي", "عهدة عبد العزيز قاسم -المصنع ك11", "عهدة عبدالله احمد الزمزمي", "عهدة علان علان صغير الشريف", "عهدة علي عجلان", "عهدة محروقات  أيمن جيلان", "عهدة محمد اغا-  تصديق مستندات التصدير", "عهدة محمد عبد الرب العياشي", "عهدة معوض محمود المرواني", "عهدة نبيل عباس", "عهدة نظام الدين", "عهدة نقدية - حمد مغربي", "عهدة هداية خالد", "عهدة ياسر محمد عوض", "عهدة يوسف جبريل عبدالله", "فرع شركة المكتب الفني للأعمال الدولية", "فرع شركة محمد منصور الرميح  للتجارة", "فرع مؤسسة بن علوش للنقليات", "فرع مؤسسة عبد الله الغامدي", "فريسكو", "فندق الاندلس مول ALANDAIUS MALL HOTEL", "فندق ترايدنت جدة THE TRIDNET JEDDAH", "فندق هوليدي ان جدة - السلام", "قسم للوجيستك- تعويضات -نبيل السامدي", "قطع غيار السيارات بالطريق", "كنداسة لخدمات المياه", "كويك ديل -تربل ايه للشحن والنقل البري العام", "م. الدروب الزرقاء الدولية", "مؤسسة  اصيل عبادي عبدربه الشيخ للصيانة", "مؤسسة أحمد محمد الأبرص التجارية", "مؤسسة أرمت للصيانة", "مؤسسة إبراهيم محمد إبراهيم الشاعري التجارية", "مؤسسة ابو عادل للتجارة", "مؤسسة احمد خالد العامري للتجارة العامة", "مؤسسة ادريس عبدالحميد الهوساوي", "مؤسسة اسماء محمد علي القرني", "مؤسسة افاق الوسيلة للنقليات", "مؤسسة اكوان العربيه لاجهزة السلامه", "مؤسسة اكون العربية لأجهزة السلامة", "مؤسسة الابداع الحرفي للتجارةCREATIVE TECH", "مؤسسة الامداد الذهبي للنقل البري", "مؤسسة البلاد الراقية للتجارة ALBELAD ALRAQIA", "مؤسسة الترابط الوثيق ( أسكراب )", "مؤسسة التركيز للدعاية والإعلانFocus Advetising Solution", "مؤسسة التشخيص الذكي للتجارة", "مؤسسة التعاون للنقل البري فرع مؤسسة فاطمة الكثيري", "مؤسسة التقنية الخصبة", "مؤسسة التكنولجيا الاحترافيةPROTECH", "مؤسسة التوزيع الرقمية لتقنية المعلومات", "مؤسسة الجسر الحديث للمقاولاتModern Bridge Cont Est", "مؤسسة الحجاز الراقية لتجارة والمعدات الصناعية", "مؤسسة الحلقات المتحدة", "مؤسسة الحلواني للتجارة", "مؤسسة الحناكي للتجاره", "مؤسسة الخط الانسيابي  التجارية", "مؤسسة الرائد الذهبي للمقاولات", "مؤسسة الريادة المعمارية للمقاولات", "مؤسسة الزومارZOMAR", "مؤسسة الزيتون للمقاولات العامة", "مؤسسة السبل الذهبية للتجارة", "مؤسسة السماء الزرقاء الجديدة NEW BLUE SKY TRADING EST", "مؤسسة السيطرة الذكية", "مؤسسة الشاحنة العربية للنقل", "مؤسسة الشروق العربي المطور التجارية", "مؤسسة الصفصاف العلمية التجارية", "مؤسسة الطعم اللذيذ للوجبات السريعة", "مؤسسة العمرانية المتالقة للمقاولات", "مؤسسة العنوان المثالي التجارية Ideal Address For trading", "مؤسسة القرية المطورة التجارية", "مؤسسة الكون الحديثة المتطورة للمقاولات", "مؤسسة الكون الذهبيةUGU", "مؤسسة المنطق الاستراتيجي", "مؤسسة الموج السريع", "مؤسسة النحام للتجارة الدولية للكمبيوتر", "مؤسسة الواحة المثاليةIdeal oasis EST", "مؤسسة امان التطوير للمقاولات Aman", "مؤسسة انظمة الموازين  العالمية -Global Scales&Systems Co.Ltd", "مؤسسة تاج الفرسان للتأجير عبدالله سويد محمد السويد", "مؤسسة تقنيات التنظيف للتجارة", "مؤسسة جلال علي احمد عطيف التجارية", "مؤسسة جميع القارات للتجارة", "مؤسسة جميل حسين محمد جميل دقاق للتجارة", "مؤسسة جودة الأنظمة التجارية", "مؤسسة حلول القوة التجارية", "مؤسسة خالد الشدوخي للمقاولات", "مؤسسة خالد بخيت العنزي التجارية", "مؤسسة خلف سعيد العمري للمقاولات(شفط البيارة)", "مؤسسة دكام سعيد صالح الحارثي لمواد البناء", "مؤسسة دلة جدة للصيانة والنظافة", "مؤسسة رائد التشييد للمقاولات العامة", "مؤسسة رافعات الغربية للمعدات الثقيلة(رافعات المتحدة", "مؤسسة روابط جدة الرياضة", "مؤسسة روابي دراين للتجارة RDT", "مؤسسة زايد شرف بن مشرف العمري للمقاولات", "مؤسسة زغرفة علي شهوان الزهراني", "مؤسسة زهر الصحاري التجارية DESERT FLOWERS", "مؤسسة زهراء حمد الصيد الحسين خضر للمقاولات", "مؤسسة سالم ضيف الله المطيريWE SIGNAGE", "مؤسسة سحابة الغربية الامنية", "مؤسسة سقالات الافق", "مؤسسة سلطان البلوي للتخليص الجمركي", "مؤسسة سماء العلم التجارية", "مؤسسة سمر عتيق حميس البشرى التجاريةSAMAR ATEQ HAMIS ALBASHRI", "مؤسسة شعلة النقل للمقاولات العامة (سحب مياه الصرف الصحي)", "مؤسسة صدى النجاح  للمقاولات العامة", "مؤسسة ضوء السماء للمقاولات العامة", "مؤسسة طه عبد الله محمد التجاريةTAHA ABDULLA M.TRADING EST.", "مؤسسة عاشور للمحركات الكهربائية", "مؤسسة عبد الله محمد الصانع للتجاره", "مؤسسة عبد الله هاشم الجيلاني للخدمات اللوجستية", "مؤسسة عبدالحميد قاسم غالب حاجب", "مؤسسة عبدالرحمن الرجحي", "مؤسسة عبدالرحمن سعد الروبياوى للمقاولات", "مؤسسة عبدالله جابر ال نصيب للمقاولات العامة", "مؤسسة عبدالله حسن الزهراني للمقاولات", "مؤسسة عبدالله حسن جبيلي التجارية A.H.JUBAILI", "مؤسسة عبدالله فيصل عالي المحمادي للمقاولات", "مؤسسة عبدالله ناجي حسان التجارية", "مؤسسة عبده احمد سعد للمقاولات العامة", "مؤسسة عبيد محمد عبيد بهميم للتجارة O.M.O.B", "مؤسسة عربنا للتجارة (خطاط عربنا", "مؤسسة علي عبد الله السبيعي", "مؤسسة علي عبدالله الجدعاني للمقاولات", "مؤسسة علي عبده هاشيمي للمقاولات العامة", "مؤسسة عماد حسين محمد الزاهرني للتجارة", "مؤسسة عمر محسن عبدالله الحامدي للخدمات اللوجستية", "مؤسسة عواد منسي الحويطي للتخليص الجمركي", "مؤسسة عين كاف سين ألف", "مؤسسة غشمه ناصر فايز السبيعي", "مؤسسة فراس الضوي للتخليص الجمركي", "مؤسسة فراس العالمية للمقاولاتFiras Int Contracting Est FTC", "مؤسسة فرج حسن بالعبيد لتوزيع المحروقات-محطة الرواد", "مؤسسة فهد الأصالة للمقاولات-ABC2", "مؤسسة فهد شاهين منير للمقاولات", "مؤسسة قمة الاطلال للمقاولاتalal Al Omairi Est For Equipment Maintenan", "مؤسسة كنوز للمقاولات", "مؤسسة كوثر محمد عبده شمسان", "مؤسسة كويك ديل للتجارة العامة", "مؤسسة لواء الإطفاء التجارية", "مؤسسة محسن مانع المنهالي التجاريه", "مؤسسة محمد حسن محمد الشافعي للتجارة", "مؤسسة محمد خلف محمد الرويلي", "مؤسسة محمد صالح الحيدري للمقاولات العامة", "مؤسسة محمد عبد الرحمن فرحات للمقاولات", "مؤسسة محمد علي المهري للمقاولات", "مؤسسة محمد علي عبده الطويلي الفقيه للتجارة", "مؤسسة محمد عوض باعزب (الوجبات الغذائية)", "مؤسسة محمد مبارك محمد العبدي -AL-ABADI EST.", "مؤسسة محمداحمد سعيد طالب التجاريةMASTTE", "مؤسسة محيط الابداع التجارية Creativity Ocean", "مؤسسة مريم سلمان اشفاق احمد كيدوائي للمقاولات العامة/ Mryam Salman Kidwani", "مؤسسة مسار المشرق للتجارة masar", "مؤسسة ملكة دارين للنقليات", "مؤسسة منارات العميد للصيانة والنظافة (كيرنز)", "مؤسسة منصور ناصر الحربي", "مؤسسة منطقة الخشب التجارية", "مؤسسة ميزة التوصيل للخدمات اللوجستية", "مؤسسة ناصر خميس خليفي", "مؤسسة ناصر صالح الرسيني للتجارة", "مؤسسة نبع المحبة التجارية", "مؤسسة نجد القمم لتقنية المعلومات", "مؤسسة نجوم الحزم لادوات الامن والسلامة", "مؤسسة نقاء الامواج للخدمات الهيدوليكية", "مؤسسة نواف مخلد الجعيد المشاريع العقارية", "مؤسسة نوف نديم سعد الندوي التجاريةNouf NadeemAl Nadwi Trading Est", "مؤسسة هادي هيازع حسين البارقي", "مؤسسة هاسكو الاعمال البحرية", "مؤسسة هاشم علي العيسائي", "مؤسسة وصية  الشيخ علي عبد الله العيسائي - مغلق", "مؤسسة يمني البركة للاخشاب ومواد البناء", "مؤسسةأمل أجهزة التحكم الذكيةللصيانةAMAL CONTROL INSTRUMENTATION SERVICE EST", "مؤسسةر كن افضل للتجارة", "مجمع المجد الطبي", "مجمع محمد الجدعاني الطبي العام", "مجمع نوفا الدولي الطبي", "مجمع واحة الشفاء الطبي", "مجموعة روافد البيت لأنظمة الجودة", "مجموعة عبدالله احمد الثقبي للتجارة", "محطة الدريس", "مختبر الفا لاب للمختبرات", "مختبر الفا لاب للمختبراتALPHA LAB", "مختبرات لمدا للمختبرات", "مخرطة الزهراني", "مدكوم للتوزيع", "مدينة الهايدروليك", "مراسم الماسية (بدرية منقاش الزاهرني )للمقاولات", "مركز الحلول الصناعية والتجاريةNDTECH", "مركز تمكين السعودية للتدريب", "مروان احمد عبد الرب العيسائي", "مزرعة القصيم", "مستودع محمد العزاز للكيماويات(متوقف)", "مستوصف 2000 الطبي", "مشتريات نقدية_عبد العزيز عمر", "مشتريات نقدية_عوض سالم", "مصر والشرق الأوسط لتكنولوجيا المعلوماتem", "مصنع الابواب المعزولة للصناعة", "مصنع الاصابع", "مصنع الاغطية للقوارير البلاستيكيه", "مصنع الامارات الوطني للصناعات البلاستيكيه", "مصنع الجدايل العالمية لعلب الالو منيوم", "مصنع الجنوب للمنتجات الورقية", "مصنع الحضارة العربية", "مصنع الدخيل للغازات الصناعيةDIGAS", "مصنع الطبلية الاولي للصناعات الخشبية", "مصنع الغاز الاول للغازات الصناعية(FIRST INDUSTRIAL GAS", "مصنع الغاز رقم 2", "مصنع الغاز رقم 3", "مصنع الفخامة الذهبية للزجاج", "مصنع الكرتون الجديد- الامارات", "مصنع اللؤلؤة البراقة للصناعات البلاستكية", "مصنع اللوحات الحديثة", "مصنع المنتجات العازلة ( سابتكس )", "مصنع دلتا للصناعات البلاستيكيه", "مصنع رواد المحيط للصناعات الخشبية", "مصنع عماد حسين محمد الزاهرني للمنتجات الاسمنتية", "مصنع مدينة الهيدوليك للحلول الصناعية فرع شركة المدينة للاعمال التجارية HYDRALIC CITY FACTORY", "مطابع المجد الحديثة", "مطابقة للإغذية", "معهد القمه المتطوره للتدريب", "مكتب الدقة والسرعة للتخليص الجمركي", "مكتب المهندس حسين الجفري لاستشارات السلامة الهندسية", "مكتب المهندس طلال يحي عشقانABC2", "مكتب النفوذ المتكاملة للخدمات التجارية", "مكتب بدر للسفر والسياحة", "مكتب رده عايش الجدعاني للإستشارات الهندسية", "مكتب شاهين للإستشارات الهندسية", "مكتب عادل قرافي محمود صالح للاستشارات الهندسية", "مكتب نبيل محمد علي عباس للاستشارات", "ملغي", "موردون أصول ثابتة", "موردون نقديون متنوعون", "موسسة باعامر للتجاره", "ميلينيوم لتجارة الكيماوياتMILLENIUM CHEMICALS", "نادي ADC", "نسما الاولي لانظمة الامن والسلامة", "هليمانHellmann Saudi Arbai LLC", "واحة التميز للاستشارات الهندسيه و استشارات السلامه الهندسيه", "ورشة الطبالي الخشب", "ورشة عبدالعزيز الزهراني لصيانة السيارات )Alzahrani Machinery", "ورشة عبدالله حسن بن ثابت الحازمي لصيانة المعدات", "وكالة الصقرالاول للسفر والسياحة", "وكالة المثالي للدعاية والاعلان", "وكالة عالم لارا للسفر والسياحة", "ياسر(عهدة وقود ومحروقات الموظفين) عبدالقادر  الوالي", "ُEICHHOLZ", "ِA SAFE DWC-LLC", "ِAir Products Abdullah Hashim Industrial Gases Co."];
+
+/* ============================================================
+   12. HAND-OFF TO THE SPARE PARTS GRID (Power Apps scrSPGrid)
+   Turns the extracted lines into rows for the
+   "Spare Part Creation Form | Spare_Parts_MD" grid:
+     Supplier PN, Other Description, Inventory unit, Vendor Name
+   (+ optional Plant / Tracking Dimension Group / Item sales tax group).
+   The copy uses the grid's own header names, so the grid's paste
+   engine maps every column by name and appends the lines.
+   ============================================================ */
+const GRID_UOM = ["Bag", "Box", "Bundle", "Ea", "kg", "km", "M", "Pcs", "Roll", "sets"];  // D365 unit symbols
+const GRID_PLANTS = ["ABC-1", "ABC-2"];
+const GRID_TDG = ["Batch", "Null"];
+const GRID_TAX = ["VAT0", "VAT15"];
+
+function mapUom(raw) {
+  const u = String(raw || "").trim().toLowerCase().replace(/[.()]/g, "");
+  if (!u) return "";
+  if (/^(ea|each)$/.test(u)) return "Ea";
+  if (/^(pcs?|pce|pcss|piece|pieces|nos?|units?|stuks?|stk|st|no|number)$/.test(u)) return "Pcs";
+  if (/^(m|mtr|mtrs|meter|meters|metre|metres|lm|rm)$/.test(u)) return "M";
+  if (/^(sets?|kits?)$/.test(u)) return "sets";
+  if (/^(box|boxes|ctn|cartons?|packs?|pkts?|pkt)$/.test(u)) return "Box";
+  if (/^(rolls?|coils?|reels?)$/.test(u)) return "Roll";
+  if (/^(bags?)$/.test(u)) return "Bag";
+  if (/^(bundles?)$/.test(u)) return "Bundle";
+  if (/^(kg|kgs|kilo|kilos|kilogram|kilograms)$/.test(u)) return "kg";
+  if (/^(km|kms|kilometers?|kilometres?)$/.test(u)) return "km";
+  return ""; // not in the grid's UOM list - user picks it below
+}
+
+const VENDOR_STOP = new Set(["co", "company", "ltd", "limited", "llc", "fze", "fzco", "fzc", "fz", "gmbh", "ag", "sa", "spa", "srl", "bv", "nv",
+  "inc", "corp", "corporation", "est", "establishment", "trading", "group", "plc", "pvt", "pte", "kg", "the", "and", "for", "of",
+  "middle", "east", "africa", "mea", "saudi", "arabia", "arabian", "ksa", "international", "industrial", "industries", "solutions",
+  "solution", "technologies", "technology", "technical", "services", "service", "engineering", "systems", "system",
+  "شركة", "مؤسسة", "المحدودة", "للتجارة", "التجارية", "مصنع", "معلق"]);
+function vendorTokens(s) {
+  return String(s || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9؀-ۿ ]+/g, " ").split(/\s+/)
+    .filter(t => t.length >= 3 && !VENDOR_STOP.has(t));
+}
+let VENDOR_INDEX = null;
+function vendorIndex() {
+  if (VENDOR_INDEX) return VENDOR_INDEX;
+  const toks = GRID_VENDORS.map(v => new Set(vendorTokens(v)));
+  const df = new Map();
+  toks.forEach(ts => ts.forEach(t => df.set(t, (df.get(t) || 0) + 1)));
+  VENDOR_INDEX = { toks, df, n: GRID_VENDORS.length };
+  return VENDOR_INDEX;
+}
+// Rare words count more than common ones ("Gulf", "Arabian"...), and a vendor is only
+// suggested when it covers most of the supplier's distinctive words.
+function suggestVendors(supplier, legal) {
+  const ix = vendorIndex();
+  const idf = t => Math.log((ix.n + 1) / ((ix.df.get(t) || 0) + 1)) + 1;
+  let want = [...new Set(vendorTokens(supplier))];
+  if (!want.length || /^unknown/i.test(supplier || "")) want = [...new Set(vendorTokens(legal))].slice(0, 4);
+  if (!want.length) return [];
+  const total = want.reduce((a, t) => a + idf(t), 0);
+  const scored = [];
+  ix.toks.forEach((vt, i) => {
+    let s = 0;
+    for (const t of want) if (vt.has(t)) s += idf(t);
+    if (s / total >= 0.5) scored.push({ v: GRID_VENDORS[i], s: s / total });
+  });
+  scored.sort((a, b) => b.s - a.s || a.v.length - b.v.length);
+  return scored.slice(0, 6);
+}
+
+let handoffRows = [];   // one per extracted line
+let handoffFiles = [];  // one per file: { filename, supplier, vendor, suggestions }
+
+function renderHandoff(results) {
+  handoffRows = [];
+  handoffFiles = [];
+  results.forEach((r, fi) => {
+    const sugg = suggestVendors(r.supplier, r.supplierLegal);
+    const unique = sugg.length > 0 && sugg[0].s >= 0.75 && (sugg.length === 1 || sugg[0].s > sugg[1].s + 0.1);
+    handoffFiles.push({ filename: r.filename, supplier: r.supplier || "", vendor: unique ? sugg[0].v : "", suggestions: sugg.map(s => s.v) });
+    (r.items || []).forEach(it => {
+      handoffRows.push({
+        fi, on: true, pn: String(it.pn || "").trim(), desc: String(it.description || "").trim(),
+        rawUnit: String(it.unit || "").trim(), uom: mapUom(it.unit), qty: it.quantity, quoteNo: it.quoteNo || "",
+      });
+    });
+  });
+  const card = document.getElementById("gridCard");
+  if (!handoffRows.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+  const opt = (list, sel) => ['<option value=""></option>'].concat(list.map(v => `<option${v === sel ? " selected" : ""}>${escapeHtml(v)}</option>`)).join("");
+  document.getElementById("gridVendors").innerHTML = handoffFiles.map((f, fi) => {
+    const has = handoffRows.some(r => r.fi === fi);
+    if (!has) return "";
+    const chips = f.suggestions.map(s => `<button type="button" class="chip" data-fi="${fi}" data-v="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("");
+    return `<div class="vrow"><label for="vend-${fi}"><b>${escapeHtml(f.filename)}</b> &middot; ${escapeHtml(f.supplier || "Unknown supplier")}</label>
+      <input id="vend-${fi}" class="vin" list="gridVendorList" data-fi="${fi}" value="${escapeHtml(f.vendor)}" placeholder="Vendor Name (type to search the vendor list)" />
+      ${chips ? `<div class="chips">Suggested: ${chips}</div>` : `<div class="chips muted">No confident match in the vendor list - type to search, or leave blank and pick it in the grid.</div>`}</div>`;
+  }).join("");
+  document.getElementById("gridVendorList").innerHTML = GRID_VENDORS.map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
+  document.getElementById("gridRows").innerHTML = handoffRows.map((r, i) => `
+    <tr>
+      <td><input type="checkbox" class="hon" data-i="${i}" ${r.on ? "checked" : ""} aria-label="Include line ${i + 1}" /></td>
+      <td><input class="hin" data-i="${i}" data-k="pn" value="${escapeHtml(r.pn)}" aria-label="Supplier PN" /></td>
+      <td><input class="hin wide" data-i="${i}" data-k="desc" value="${escapeHtml(r.desc)}" aria-label="Other Description" /></td>
+      <td><select class="hsel ${r.uom ? "" : "need"}" data-i="${i}" aria-label="Inventory unit">${opt(GRID_UOM, r.uom)}</select>
+          ${r.rawUnit && r.rawUnit.toLowerCase() !== r.uom.toLowerCase() ? `<div class="note">quote: ${escapeHtml(r.rawUnit)}</div>` : ""}</td>
+      <td class="num r">${r.qty != null ? r.qty : ""}</td>
+      <td class="note">${escapeHtml(handoffFiles[r.fi].filename)}</td>
+    </tr>`).join("");
+  document.getElementById("gridPlant").innerHTML = opt(GRID_PLANTS, document.getElementById("gridPlant").value);
+  document.getElementById("gridTdg").innerHTML = opt(GRID_TDG, document.getElementById("gridTdg").value);
+  document.getElementById("gridTax").innerHTML = opt(GRID_TAX, document.getElementById("gridTax").value);
+  updateHandoffCount();
+}
+
+function updateHandoffCount() {
+  const n = handoffRows.filter(r => r.on).length;
+  const noUom = handoffRows.filter(r => r.on && !r.uom).length;
+  document.getElementById("gridCopyBtn").textContent = `Copy ${n} line${n === 1 ? "" : "s"} for Power Apps`;
+  document.getElementById("gridCopyBtn").disabled = n === 0;
+  document.getElementById("gridHint").textContent = noUom
+    ? `${noUom} selected line(s) have no Inventory unit yet - pick one, or fix it in the grid (it will show red).`
+    : "";
+}
+
+function buildGridTsv() {
+  const plant = document.getElementById("gridPlant").value;
+  const tdg = document.getElementById("gridTdg").value;
+  const tax = document.getElementById("gridTax").value;
+  const head = ["Supplier PN", "Other Desciption", "Inventory unit", "Vendor Name"];
+  if (plant) head.push("Plant");
+  if (tdg) head.push("Tracking Dimension Group");
+  if (tax) head.push("Item sales tax group");
+  const clean = v => String(v == null ? "" : v).replace(/[\t\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+  const lines = [head.join("\t")];
+  handoffRows.filter(r => r.on).forEach(r => {
+    const row = [clean(r.pn), clean(r.desc), clean(r.uom), clean(handoffFiles[r.fi].vendor)];
+    if (plant) row.push(plant);
+    if (tdg) row.push(tdg);
+    if (tax) row.push(tax);
+    lines.push(row.join("\t"));
+  });
+  return lines.join("\r\n") + "\r\n";
+}
+
+function wireHandoff() {
+  const card = document.getElementById("gridCard");
+  card.addEventListener("change", e => {
+    const t = e.target, i = +t.dataset.i;
+    if (t.classList.contains("hon")) handoffRows[i].on = t.checked;
+    else if (t.classList.contains("hsel")) { handoffRows[i].uom = t.value; t.classList.toggle("need", !t.value); }
+    else if (t.classList.contains("vin")) handoffFiles[+t.dataset.fi].vendor = t.value.trim();
+    updateHandoffCount();
+  });
+  card.addEventListener("input", e => {
+    const t = e.target;
+    if (t.classList.contains("hin")) handoffRows[+t.dataset.i][t.dataset.k] = t.value;
+    if (t.classList.contains("vin")) handoffFiles[+t.dataset.fi].vendor = t.value.trim();
+  });
+  card.addEventListener("click", e => {
+    const t = e.target;
+    if (t.classList.contains("chip")) {
+      const fi = +t.dataset.fi;
+      handoffFiles[fi].vendor = t.dataset.v;
+      document.getElementById("vend-" + fi).value = t.dataset.v;
+    }
+  });
+  document.getElementById("gridAll").addEventListener("click", () => { handoffRows.forEach(r => r.on = true); document.querySelectorAll(".hon").forEach(c => c.checked = true); updateHandoffCount(); });
+  document.getElementById("gridNone").addEventListener("click", () => { handoffRows.forEach(r => r.on = false); document.querySelectorAll(".hon").forEach(c => c.checked = false); updateHandoffCount(); });
+  document.getElementById("gridCopyBtn").addEventListener("click", async () => {
+    const tsv = buildGridTsv();
+    const n = handoffRows.filter(r => r.on).length;
+    const msg = document.getElementById("gridStatus");
+    const box = document.getElementById("gridFallback");
+    try {
+      await navigator.clipboard.writeText(tsv);
+      box.style.display = "none";
+      msg.className = "status ok-note";
+      msg.textContent = `Copied ${n} line(s). In Power Apps click "From Quotation" (or "Paste from Excel"), press Ctrl+V in the box and click Apply.`;
+    } catch (err) {
+      box.style.display = "block";
+      box.value = tsv;
+      box.focus(); box.select();
+      msg.className = "status warn-note";
+      msg.textContent = "The browser blocked the clipboard - the lines are selected below, press Ctrl+C to copy them.";
+    }
+  });
+}
+wireHandoff();
+
+</script>
+
+</body></html>
